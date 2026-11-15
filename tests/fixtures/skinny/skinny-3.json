@@ -1,0 +1,494 @@
+{
+  "recipe": {
+    "schemaVersion": 4,
+    "id": "spider_robot",
+    "name": "Skittery Bolt",
+    "seed": 8801,
+    "source": {
+      "kind": "words",
+      "description": "A spider robot with eight long skinny legs and a small round body, standing up as a fighter: four legs to stand on, four long arms."
+    },
+    "parts": [
+      {
+        "id": "torso",
+        "parent": null,
+        "role": "torso",
+        "attach": 0,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "dir": {
+          "x": 0,
+          "y": 0.9987523388778446,
+          "z": 0.04993761694389223
+        },
+        "length": 0.2,
+        "r0": 0.17,
+        "r1": 0.17,
+        "squash": 1,
+        "flatFacing": "up",
+        "pointed": false,
+        "mirror": false,
+        "region": "body"
+      },
+      {
+        "id": "head",
+        "parent": "torso",
+        "role": "head",
+        "attach": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0.02
+        },
+        "dir": {
+          "x": 0,
+          "y": 0.9950371902099893,
+          "z": 0.09950371902099893
+        },
+        "length": 0.08,
+        "r0": 0.12,
+        "r1": 0.11,
+        "squash": 1,
+        "flatFacing": "up",
+        "pointed": false,
+        "mirror": false,
+        "region": "body"
+      },
+      {
+        "id": "eye",
+        "parent": "head",
+        "role": "eye",
+        "attach": 0.55,
+        "offset": {
+          "x": 0.05,
+          "y": 0.02,
+          "z": 0.09
+        },
+        "dir": {
+          "x": 0.2414022747926338,
+          "y": 0.09656090991705352,
+          "z": 0.9656090991705352
+        },
+        "length": 0.01,
+        "r0": 0.05,
+        "r1": 0.05,
+        "squash": 1,
+        "flatFacing": "forward",
+        "pointed": false,
+        "mirror": true,
+        "region": "eyes"
+      },
+      {
+        "id": "legA1",
+        "parent": "torso",
+        "role": "leg",
+        "attach": 0,
+        "offset": {
+          "x": 0.08,
+          "y": 0.02,
+          "z": 0.06
+        },
+        "dir": {
+          "x": 0.7171371656006361,
+          "y": -0.5976143046671968,
+          "z": 0.35856858280031806
+        },
+        "length": 0.5,
+        "r0": 0.035,
+        "r1": 0.025,
+        "squash": 1,
+        "flatFacing": "up",
+        "pointed": false,
+        "mirror": true,
+        "region": "legs"
+      },
+      {
+        "id": "legA2",
+        "parent": "legA1",
+        "role": "leg",
+        "attach": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "dir": {
+          "x": 0.23809523809523808,
+          "y": -0.9523809523809523,
+          "z": 0.19047619047619047
+        },
+        "length": 0.6,
+        "r0": 0.025,
+        "r1": 0.02,
+        "squash": 1,
+        "flatFacing": "up",
+        "pointed": false,
+        "mirror": false,
+        "region": "legs"
+      },
+      {
+        "id": "footA",
+        "parent": "legA2",
+        "role": "foot",
+        "attach": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "dir": {
+          "x": 0,
+          "y": -0.19611613513818404,
+          "z": 0.9805806756909201
+        },
+        "length": 0.12,
+        "r0": 0.03,
+        "r1": 0.025,
+        "squash": 0.6,
+        "flatFacing": "up",
+        "pointed": false,
+        "mirror": false,
+        "region": "legs"
+      },
+      {
+        "id": "legB1",
+        "parent": "torso",
+        "role": "leg",
+        "attach": 0,
+        "offset": {
+          "x": 0.08,
+          "y": 0.02,
+          "z": -0.06
+        },
+        "dir": {
+          "x": 0.7171371656006361,
+          "y": -0.5976143046671968,
+          "z": -0.35856858280031806
+        },
+        "length": 0.5,
+        "r0": 0.035,
+        "r1": 0.025,
+        "squash": 1,
+        "flatFacing": "up",
+        "pointed": false,
+        "mirror": true,
+        "region": "legs"
+      },
+      {
+        "id": "legB2",
+        "parent": "legB1",
+        "role": "leg",
+        "attach": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "dir": {
+          "x": 0.23809523809523808,
+          "y": -0.9523809523809523,
+          "z": -0.19047619047619047
+        },
+        "length": 0.6,
+        "r0": 0.025,
+        "r1": 0.02,
+        "squash": 1,
+        "flatFacing": "up",
+        "pointed": false,
+        "mirror": false,
+        "region": "legs"
+      },
+      {
+        "id": "footB",
+        "parent": "legB2",
+        "role": "foot",
+        "attach": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "dir": {
+          "x": 0,
+          "y": -0.19611613513818404,
+          "z": 0.9805806756909201
+        },
+        "length": 0.12,
+        "r0": 0.03,
+        "r1": 0.025,
+        "squash": 0.6,
+        "flatFacing": "up",
+        "pointed": false,
+        "mirror": false,
+        "region": "legs"
+      },
+      {
+        "id": "armA1",
+        "parent": "torso",
+        "role": "arm",
+        "attach": 0.8,
+        "offset": {
+          "x": 0.14,
+          "y": 0,
+          "z": 0.05
+        },
+        "dir": {
+          "x": 0.8082903768654761,
+          "y": -0.11547005383792518,
+          "z": 0.5773502691896258
+        },
+        "length": 0.4,
+        "r0": 0.03,
+        "r1": 0.025,
+        "squash": 1,
+        "flatFacing": "up",
+        "pointed": false,
+        "mirror": true,
+        "region": "legs"
+      },
+      {
+        "id": "armA2",
+        "parent": "armA1",
+        "role": "arm",
+        "attach": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "dir": {
+          "x": 0.19611613513818404,
+          "y": -0.7844645405527362,
+          "z": 0.588348405414552
+        },
+        "length": 0.45,
+        "r0": 0.025,
+        "r1": 0.02,
+        "squash": 1,
+        "flatFacing": "up",
+        "pointed": false,
+        "mirror": false,
+        "region": "legs"
+      },
+      {
+        "id": "handA",
+        "parent": "armA2",
+        "role": "hand",
+        "attach": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "dir": {
+          "x": 0.20739033894608505,
+          "y": -0.8295613557843402,
+          "z": 0.5184758473652126
+        },
+        "length": 0.05,
+        "r0": 0.07,
+        "r1": 0.07,
+        "squash": 1,
+        "flatFacing": "up",
+        "pointed": false,
+        "mirror": false,
+        "region": "body"
+      },
+      {
+        "id": "armB1",
+        "parent": "torso",
+        "role": "arm",
+        "attach": 0.7,
+        "offset": {
+          "x": 0.14,
+          "y": 0,
+          "z": -0.05
+        },
+        "dir": {
+          "x": 0.9630868246861536,
+          "y": 0.1203858530857692,
+          "z": -0.2407717061715384
+        },
+        "length": 0.4,
+        "r0": 0.03,
+        "r1": 0.025,
+        "squash": 1,
+        "flatFacing": "up",
+        "pointed": false,
+        "mirror": true,
+        "region": "legs"
+      },
+      {
+        "id": "armB2",
+        "parent": "armB1",
+        "role": "arm",
+        "attach": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "dir": {
+          "x": 0.3312945782245396,
+          "y": -0.8834522085987724,
+          "z": 0.3312945782245396
+        },
+        "length": 0.45,
+        "r0": 0.025,
+        "r1": 0.02,
+        "squash": 1,
+        "flatFacing": "up",
+        "pointed": false,
+        "mirror": false,
+        "region": "legs"
+      },
+      {
+        "id": "handB",
+        "parent": "armB2",
+        "role": "hand",
+        "attach": 1,
+        "offset": {
+          "x": 0,
+          "y": 0,
+          "z": 0
+        },
+        "dir": {
+          "x": 0.3312945782245396,
+          "y": -0.8834522085987724,
+          "z": 0.3312945782245396
+        },
+        "length": 0.05,
+        "r0": 0.07,
+        "r1": 0.07,
+        "squash": 1,
+        "flatFacing": "up",
+        "pointed": false,
+        "mirror": false,
+        "region": "body"
+      }
+    ],
+    "skin": {
+      "regions": [
+        {
+          "id": "body",
+          "covering": "shell",
+          "color": "#7fa8e0",
+          "belly": "#d6e6fa",
+          "furLength": 0,
+          "fluff": 0,
+          "coat": null,
+          "pattern": {
+            "kind": "patches",
+            "color": "#ffd23f",
+            "scale": 0.1,
+            "amount": 0.2,
+            "along": false
+          }
+        },
+        {
+          "id": "legs",
+          "covering": "shell",
+          "color": "#8a96ab",
+          "belly": null,
+          "furLength": 0,
+          "fluff": 0,
+          "coat": null,
+          "pattern": {
+            "kind": "rings",
+            "color": "#3b4660",
+            "scale": 0.12,
+            "amount": 0.5,
+            "along": false
+          }
+        },
+        {
+          "id": "eyes",
+          "covering": "skin",
+          "color": "#ff4f4f",
+          "belly": null,
+          "furLength": 0,
+          "fluff": 0,
+          "coat": null,
+          "pattern": null
+        }
+      ],
+      "eyes": {
+        "color": "#ff4f4f",
+        "pupil": "round",
+        "size": 0.7
+      }
+    },
+    "motion": {
+      "gait": "walk",
+      "bounce": 0.5,
+      "sway": 0.4,
+      "stance": "upright"
+    },
+    "life": {
+      "sizeM": 1.3,
+      "massKg": 25,
+      "topSpeed": 4,
+      "stamina": 0.8,
+      "lifespanDays": 3000,
+      "maturityDays": 100,
+      "litterMin": 1,
+      "litterMax": 1,
+      "juvenileHead": 1.2,
+      "juvenileFluff": 0
+    },
+    "mind": {
+      "plants": [],
+      "preyMin": 0,
+      "preyMax": 0,
+      "scavenger": false,
+      "boldness": 0.6,
+      "jumpiness": 0.5,
+      "social": "solitary",
+      "activity": "day",
+      "habitat": [
+        "ground"
+      ],
+      "senses": {
+        "fov": 220,
+        "acuity": 0.7,
+        "night": 0.5,
+        "smell": 0.2,
+        "hearing": 0.6,
+        "colour": "vivid"
+      }
+    },
+    "inheritance": [
+      {
+        "path": "parts.legA1.length",
+        "spread": 0.1
+      },
+      {
+        "path": "skin.regions.body.color",
+        "spread": 0.1
+      }
+    ],
+    "fight": {
+      "move": "kick",
+      "weapons": [
+        "footA",
+        "footB"
+      ],
+      "weight": "a clattery twenty-five pounds of spare parts",
+      "intro": "From the workshop of {maker}! Weighing in at a clattery twenty-five pounds! With eight long skinny legs and a whirring round body... it's SKITTERY BOLT!"
+    },
+    "build": {
+      "muscle": 0.4,
+      "feet": "plain"
+    },
+    "face": {
+      "nose": "none",
+      "noseColor": null,
+      "lids": true,
+      "earInner": null,
+      "brow": 0.2
+    }
+  }
+}
