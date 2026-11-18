@@ -1,4 +1,4 @@
-/* ---------- the TV app: the start screen, the TV menu (read from the sofa: sized in vh, 28 px or more at 1080p) ---------- */
+/* ---------- the TV app: the start screen, the TV menu, the controllers' pickers (read from the sofa: sized in vh, 28 px or more at 1080p) ---------- */
 @import url('https://fonts.googleapis.com/css2?family=Lilita+One&display=swap');
 
 /* the workshop's studio renders off-screen (the fight stays full-screen, spec §2.12) */
@@ -10,7 +10,7 @@
   font-size: 3.4vh; font-weight: 900; text-align: center;
 }
 
-/* ---- the start screen: "ADD A CREATURE!" over the empty ring (the join card sits bottom right) ---- */
+/* ---- the start screen: "ADD A CREATURE!" over the empty stage (the join card sits bottom right) ---- */
 .rm-start {
   position: fixed; left: 50%; top: 30vh; transform: translateX(-50%); width: max-content; max-width: 70vw; display: grid;
   justify-items: center; gap: 1.6vh; text-align: center; pointer-events: none; z-index: 5;
@@ -64,6 +64,7 @@
   outline: 0.8vh solid #ff4f8b; outline-offset: 0.45vh; box-shadow: 0 0 0 1.6vh #ff4f8b40, 0 0.35vh 1vh #2b146040; transform: scale(1.06);
 }
 .rm-row-volume .rm-btn:not(:last-child) { width: 2.3em; padding: 0; font-size: 1.2em; }
+.rm-row-level .rm-items, .rm-row-volume .rm-items { flex-wrap: nowrap; } /* the level picker and the sound row stay on one line */
 .rm-level { display: inline-flex; gap: 0.7vh; align-items: flex-end; height: 3.2em; padding: 0 0.6vh; }
 .rm-level i { width: 1.6vh; border-radius: 0.6vh; background: #2b146030; }
 .rm-level i.lit { background: #5fae4a; }
@@ -85,6 +86,51 @@
 .rm-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 900; }
 .rm-maker { font-size: max(26px, 0.8em); font-weight: 700; color: #2b1460c0; }
 
+/* ---- a controller's picker (Start on a free pad): along the bottom, one per pad in its colour, under the TV menu ---- */
+.rm-pickers {
+  position: fixed; left: 2vw; right: 2vw; bottom: 3vh; z-index: 25; display: flex; justify-content: center; align-items: flex-end;
+  gap: 2vw; pointer-events: none; font-size: max(24px, 3vh);
+}
+.rm-picker {
+  flex: 0 1 auto; min-width: 0; max-width: 64vw; display: grid; gap: 1vh; padding: 1.6vh 2.4vh 1.4vh; box-sizing: border-box;
+  border-radius: 3vh; border: 0.8vh solid var(--pad, #ff4f7b); background: linear-gradient(#fff3fbf7, #e6f6fff7); color: #2b1460;
+  box-shadow: 0 1vh 3.6vh #0007; animation: rm-picker-in 0.2s ease-out;
+}
+.rm-pickers .rm-picker:not(:only-child) { max-width: 46vw; }
+@keyframes rm-picker-in { from { transform: translateY(4vh); opacity: 0; } }
+.rm-pick-title {
+  margin: 0; display: flex; align-items: center; gap: 1.2vh; font: 1.3em/1.1 'Lilita One', 'Nunito', system-ui, sans-serif;
+  letter-spacing: 0.02em; color: #2b1460;
+}
+.rm-pick-player {
+  display: grid; place-items: center; width: 1.6em; height: 1.6em; border-radius: 50%; background: var(--pad, #ff4f7b); color: #fff;
+  -webkit-text-stroke: 0.18vh #1a1030; paint-order: stroke fill; border: 0.4vh solid #fff; box-shadow: 0 0.3vh 0 #1a1030;
+}
+.rm-pick-row {
+  display: flex; gap: 1.4vh; margin: 0; padding: 1vh 0.6vh; list-style: none; overflow: hidden; scroll-behavior: smooth;
+}
+.rm-pick {
+  flex: 0 0 auto; width: 18vh; display: grid; justify-items: center; gap: 0.5vh; padding: 1.2vh 0.8vh; border-radius: 2.2vh;
+  background: #ffffffc0; text-align: center; transition: transform 0.1s ease;
+}
+.rm-pick.on { outline: 0.8vh solid var(--pad, #ff4f7b); outline-offset: 0.3vh; background: #fff; transform: scale(1.06); }
+.rm-pick .rm-thumb { width: 10vh; height: 10vh; }
+.rm-pick .rm-name {
+  font-size: 0.8em; line-height: 1.1; white-space: normal; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; min-height: 2.2em; align-content: center;
+}
+.rm-pick-tag { font-size: max(20px, 0.62em); font-weight: 800; color: #2b1460b0; }
+.rm-pick-send .rm-pick-tag { color: #3a8a2a; }
+.rm-pick-hint { justify-self: center; display: flex; gap: 3vh; font-size: max(20px, 0.75em); font-weight: 900; color: #2b1460; }
+.rm-pick-key { display: inline-flex; align-items: center; gap: 0.8vh; }
+/* the controller's own button colours, for those who cannot read yet: green A, red B */
+.rm-glyph {
+  display: inline-grid; place-items: center; width: 1.6em; height: 1.6em; border-radius: 50%; color: #fff; font-weight: 900;
+  box-shadow: 0 0.3vh 0 #1a1030; -webkit-text-stroke: 0.12vh #1a1030; paint-order: stroke fill;
+}
+.rm-glyph-a { background: #3fb24a; }
+.rm-glyph-b { background: #e5413b; }
+
 @media (prefers-reduced-motion: reduce) {
-  .rm-start-title, .rm-menu { animation: none; }
+  .rm-start-title, .rm-menu, .rm-picker { animation: none; }
 }

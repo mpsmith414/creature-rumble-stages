@@ -296,7 +296,7 @@ describe('relay routes', () => {
   });
 });
 
-describe('relay routes: phone commands and the ring (Task 16)', () => {
+describe('relay routes: phone commands and the match broadcast (Task 16)', () => {
   const command = (s: ReturnType<typeof setup>, body: unknown) => s.post('/api/phone/command', body);
   const fighter = { id: 'r1', name: 'Zib', maker: 'Doodle', crowns: 1, thumb: 'data:image/jpeg;base64,AAAA' };
 
@@ -346,16 +346,16 @@ describe('relay routes: phone commands and the ring (Task 16)', () => {
     await events.cancel();
   });
 
-  it('the host sends the ring (no token needed) and every phone hears it', async () => {
+  it('the host sends the match (no token needed) and every phone hears it', async () => {
     const s = setup();
     const { host, events: hostEvents } = await register(s);
     const a = await joinPhone(s, 'Doodle'), b = await joinPhone(s, 'Bo');
-    const ring = { type: 'ring', phase: 'open', fighting: 1, roster: [fighter] };
-    const res = await s.post(`/api/relay/host/send?h=${host.hostId}`, ring);
+    const match = { type: 'match', phase: 'open', fighting: 1, roster: [fighter] };
+    const res = await s.post(`/api/relay/host/send?h=${host.hostId}`, match);
     expect(await res.json()).toEqual({ ok: true });
-    for (const p of [a, b]) expect(await p.events.until<PhoneMsg>((m) => m.type === 'ring')).toEqual(ring);
-    expect((await s.post(`/api/relay/host/send?h=other`, ring)).status).toBe(404);
-    expect((await s.post(`/api/relay/host/send?h=${host.hostId}`, { ...ring, phase: 'nope' })).status).toBe(400);
+    for (const p of [a, b]) expect(await p.events.until<PhoneMsg>((m) => m.type === 'match')).toEqual(match);
+    expect((await s.post(`/api/relay/host/send?h=other`, match)).status).toBe(404);
+    expect((await s.post(`/api/relay/host/send?h=${host.hostId}`, { ...match, phase: 'nope' })).status).toBe(400);
     expect((await s.post(`/api/relay/host/send?h=${host.hostId}`, { type: 'released' })).status).toBe(400); // a stage message still needs its token
     await Promise.all([hostEvents.cancel(), a.events.cancel(), b.events.cancel()]);
   });
@@ -370,7 +370,7 @@ describe('relay routes: only the PC itself may host (Task 16 review)', () => {
     expect((await s.post('/api/relay/host', { port: 5180 })).status).toBe(403);
     expect((await s.app.request(`/api/relay/host/events?h=${host.hostId}`)).status).toBe(403);
     expect((await s.app.request(`/api/relay/host/status?h=${host.hostId}`)).status).toBe(403);
-    expect((await s.post(`/api/relay/host/send?h=${host.hostId}`, { type: 'ring', phase: 'open', fighting: 9, roster: [] })).status).toBe(403);
+    expect((await s.post(`/api/relay/host/send?h=${host.hostId}`, { type: 'match', phase: 'open', fighting: 9, roster: [] })).status).toBe(403);
     expect((await s.post('/api/cap', { limit: 10 })).status).toBe(403);
     expect(s.cap.state().limit).toBe(DEFAULT_LIMIT);
     for (const address of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {

@@ -1,12 +1,12 @@
 /**
- * Four-way balance samples run side by side: `fourWayReport`'s bouts spread over helper processes, one per spare core
- * (each bout is seeded on its own, so the report is the same as `fourWayReport`'s, only sooner). Node only: for the
+ * Four-way balance samples run side by side: `fourWayReport`'s stage bouts spread over helper processes, one per spare
+ * core (each bout is seeded on its own, so the report is the same as `fourWayReport`'s, only sooner). Node only: for the
  * balance tests and tools/balance.ts.
  */
 import { fork, type ChildProcess } from 'node:child_process';
 import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { fourWayBouts, summarize, type BoutJob, type BoutResult, type FourWayOptions, type FourWayReport } from '../src/fight/sim';
+import { fourWayBouts, summarize, type BodyKind, type BoutJob, type BoutResult, type FourWayOptions, type StageReport } from '../src/stage/report';
 
 const CHILD = fileURLToPath(new URL('./bout-child.ts', import.meta.url));
 
@@ -43,8 +43,8 @@ export async function runBouts(jobs: BoutJob[], o: { procs?: number; onBout?: (i
 }
 
 /** `fourWayReport(n, o)`, its bouts run side by side. */
-export async function fourWayReportFast(n: number, o: FourWayOptions & { procs?: number; onBout?: (i: number, cast: string[], r: BoutResult) => void } = {}): Promise<FourWayReport> {
+export async function fourWayReportFast(n: number, o: FourWayOptions & { procs?: number; onBout?: (i: number, cast: BodyKind[], r: BoutResult) => void } = {}): Promise<StageReport> {
   const jobs = fourWayBouts(n, o);
   const bouts = await runBouts(jobs, { procs: o.procs, onBout: (i, r) => o.onBout?.(i, jobs[i].kinds, r) });
-  return summarize(bouts, jobs.map((j) => j.kinds), o.seconds ?? 240);
+  return summarize(bouts, jobs.map((j) => j.kinds));
 }

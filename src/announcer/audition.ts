@@ -8,7 +8,7 @@ const VOICES = ['am_michael', 'am_fenrir', 'am_puck', 'am_eric', 'am_liam', 'am_
 const LINES = [
   "From the bedroom of a mystery maker! Weighing in at one teeny tiny pound! It's... SIR BOUNCES-A-LOT!",
   'OH MY GOODNESS! BLOBZILLA sends him FLYING!',
-  'BYE BYE, Captain Noodle! You are OUT of the ring!',
+  'BYE BYE, Captain Noodle! You are OUT of here!',
   'Is there ANYONE brave enough to face THE WOBBLER?!',
   'Ladies and gentlemen... your CHAMPION... PRINCESS PICKLE!',
 ];

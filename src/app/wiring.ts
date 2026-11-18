@@ -1,13 +1,13 @@
 /**
- * The TV's small, pure pieces of wiring between the phones, the roster, the announcer's voice and the ring, kept out of
- * main.ts and rumble.ts so they can be tested: phase-gated phone commands, the ring broadcast, sending a roster
+ * The TV's small, pure pieces of wiring between the phones, the roster, the announcer's voice and the match, kept out of
+ * main.ts and rumble.ts so they can be tested: phase-gated phone commands, the match broadcast, sending a roster
  * fighter back in, the "coming soon" capsule as the workshop's screen, and stores that never throw.
  */
 import type { BodyData } from '../builder/build';
 import type { Studio } from '../bring/studio';
 import type { WorkshopUi } from '../bring/workshop';
 import type { Made } from '../bring/workshop';
-import type { Maker, PhoneCommand, RingEntry, RingPhase } from '../bring/protocol';
+import type { Maker, PhoneCommand, RosterEntry, MatchPhase } from '../bring/protocol';
 import type { Recipe } from '../recipe/schema';
 import type { RosterItem, RosterSummary } from '../roster/roster';
 
@@ -15,8 +15,8 @@ import type { RosterItem, RosterSummary } from '../roster/roster';
 
 /** What a phone's command may do, and when: the TV decides. */
 export type CommandDeps = {
-  phase(): RingPhase;
-  /** How many are fighting in the ring now. */
+  phase(): MatchPhase;
+  /** How many are fighting on the stage now. */
   fighting(): number;
   crown(): void;
   again(): void;
@@ -24,7 +24,7 @@ export type CommandDeps = {
 };
 
 /**
- * A phone's crown, again or send-back, if the ring allows it now: Crown only while the ring is open with someone in it,
+ * A phone's crown, again or send-back, if the match allows it now: Crown only while the match is open with someone in it,
  * Again! only after a crowning (so a second press, or two phones at once, does nothing). Returns what was done.
  */
 export function handleCommand(cmd: PhoneCommand, d: CommandDeps): 'crown' | 'again' | 'sendBack' | 'ignored' {
@@ -42,25 +42,48 @@ export function handleCommand(cmd: PhoneCommand, d: CommandDeps): 'crown' | 'aga
   return 'sendBack';
 }
 
-// ---------- the ring broadcast ----------
+// ---------- the join card on the TV ----------
+
+/** Where the TV remembers whether the join card is on (`CardMode`), across nights. */
+export const JOIN_CARD_KEY = 'rumble.joinCard';
+/** The join card's mode on a fresh TV (shown, as the night starts with phones to join). */
+export const JOIN_CARD_DEFAULT = 'on';
 
 /**
- * Tells every phone how the ring stands (`bring.sendRing`) whenever the match phase or the number fighting changes
+ * The J key on the TV's keyboard shows or hides the join card (`toggle`), as the menu's "Show join code" does; held
+ * keys repeating, keys with Ctrl, Alt or Meta, and keys while the menu or the workshop has the screen do nothing.
+ * True when it toggled.
+ */
+export function joinKey(e: { key: string; repeat?: boolean; ctrlKey?: boolean; altKey?: boolean; metaKey?: boolean }, busy: boolean,
+  toggle: () => unknown): boolean {
+  if (busy || e.repeat || e.ctrlKey || e.altKey || e.metaKey || e.key.toLowerCase() !== 'j') return false;
+  toggle();
+  return true;
+}
+
+/** The start screen's line under "ADD A CREATURE!": how to join, with the card showing, or how to show it when it is hidden. */
+export const startHint = (cardShown: boolean) =>
+  cardShown ? 'Scan the code with a phone and draw a fighter' : 'Press J to show the code for phones';
+
+// ---------- the match broadcast ----------
+
+/**
+ * Tells every phone how the match stands (`bring.sendMatch`) whenever the match phase or the number fighting changes
  * (`watch`, every frame), the roster changes (`push`) or the relay is new (`push` on a fresh `hosting`). Pushes never
  * overlap: one asked for while another is on its way goes once after it, with the state as it is then.
  */
-export class RingBroadcast {
-  private last: { phase: RingPhase; fighting: number } | null = null;
+export class MatchBroadcast {
+  private last: { phase: MatchPhase; fighting: number } | null = null;
   private busy: Promise<void> | null = null;
   private again = false;
-  /** The roster as last read: a ring change sends it again; only `push(true)` (the roster changed) reads it afresh. */
-  private entries: readonly RingEntry[] | null = null;
+  /** The roster as last read: a match change sends it again; only `push(true)` (the roster changed) reads it afresh. */
+  private entries: readonly RosterEntry[] | null = null;
   private stale = true;
 
   constructor(private readonly o: {
-    state(): { phase: RingPhase; fighting: number };
-    roster(): Promise<readonly RingEntry[]>;
-    send(phase: RingPhase, fighting: number, roster: readonly RingEntry[]): unknown;
+    state(): { phase: MatchPhase; fighting: number };
+    roster(): Promise<readonly RosterEntry[]>;
+    send(phase: MatchPhase, fighting: number, roster: readonly RosterEntry[]): unknown;
   }) {}
 
   /** Push if the phase or the fighting count changed since the last push (cheap; call it every frame). */
@@ -94,7 +117,7 @@ export class RingBroadcast {
           }
           await this.o.send(s.phase, s.fighting, this.entries);
         } catch (e) {
-          console.warn('could not tell the phones about the ring', e);
+          console.warn('could not tell the phones about the fight', e);
         }
       } while (this.again);
       this.busy = null;
@@ -106,19 +129,19 @@ export class RingBroadcast {
 // ---------- send back in ----------
 
 export type SendBackDeps = {
-  /** Already in the ring, entering or on deck: nothing to load. */
+  /** Already on the stage, entering or on deck: nothing to load. */
   known?(id: string): boolean;
   get(id: string): Promise<RosterItem | undefined>;
   /** The saved body of a recipe, or null (the builder cache: `loadBody(bodyCacheKey(recipe))`). */
   cached(recipe: Recipe): Promise<BodyData | null>;
   build(recipe: Recipe): Promise<BodyData>;
-  /** Into the ring: register the fighter and call `match.arrive` (an entrance follows). */
+  /** Onto the stage: register the fighter and call `match.arrive` (an entrance follows). */
   arrive(item: RosterItem, body: BodyData): void;
 };
 
 /**
- * Sends a roster creature back into the ring: its body from the builder cache, or built again on a miss, then `arrive`.
- * An unknown id, or one already in the ring or on deck, does nothing (no body is loaded or built). True when it was sent.
+ * Sends a roster creature back onto the stage: its body from the builder cache, or built again on a miss, then `arrive`.
+ * An unknown id, or one already on the stage or on deck, does nothing (no body is loaded or built). True when it was sent.
  */
 export async function sendBack(id: string, d: SendBackDeps): Promise<boolean> {
   if (d.known?.(id)) return false;
@@ -132,7 +155,7 @@ export async function sendBack(id: string, d: SendBackDeps): Promise<boolean> {
 // ---------- a phone's creature, kept and sent in ----------
 
 /**
- * "Send to the ring!" (`enter` true) or "Save for later": the creature is checked first (it must make a fighter), so a
+ * "Send to the fight!" (`enter` true) or "Save for later": the creature is checked first (it must make a fighter), so a
  * recipe that cannot fight never leaves a broken roster entry; then it is kept, then (on a release) sent in. Throws
  * when it cannot be checked or kept.
  */

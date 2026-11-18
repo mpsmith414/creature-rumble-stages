@@ -90,7 +90,7 @@ export function showSound(ui: HTMLElement): void {
     return (announcer = new Announcer({ voice, banner: new Banner(document.body), mixer: p.mixer, sfx: p.sfx, crowd: p.crowd, rng: Math.random, now: () => performance.now() }));
   };
   const names = { name: 'Sir Bounces', other: 'Captain Wobble', names: 'Sir Bounces and Captain Wobble', special: 'MEGA PUNCH', maker: 'Pickle', weight: 'two buckets' };
-  const beats: Beat[] = ['intro', 'groupIntro', 'hit', 'bigHit', 'special', 'ringOut', 'holdsRing', 'lone', 'tie', 'crown', 'again'];
+  const beats: Beat[] = ['intro', 'groupIntro', 'hit', 'bigHit', 'special', 'knockOut', 'holdsStage', 'lone', 'levelEvent', 'present', 'aboutToFly', 'tie', 'crown', 'again'];
   for (const beat of beats) {
     button(`Say: ${beat}`, () => {
       const a = announce();

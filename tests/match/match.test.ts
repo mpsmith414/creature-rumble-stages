@@ -1,12 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import { Match } from '../../src/match/match';
-import { ENTRANCE_S, GROUP_ENTRANCE_S, isOut, isUnderFloor, type MatchEvent } from '../../src/match/rules';
+import { ENTRANCE_S, GROUP_ENTRANCE_S, type MatchEvent } from '../../src/match/rules';
 
 const names = (n: number) => Array.from({ length: n }, (_, i) => String.fromCharCode(97 + i));
 const starts = (evs: MatchEvent[]) => evs.filter((e) => e.type === 'entranceStart');
 
 /** A Match with `ids` already fighting. */
-function withFighters(ids: string[], o?: { maxInRing?: number; freeze?: boolean }): Match {
+function withFighters(ids: string[], o?: { maxOnStage?: number; freeze?: boolean }): Match {
   const m = new Match(o);
   m.arrive(ids);
   m.tick(0.1);
@@ -70,19 +70,19 @@ describe('Match', () => {
     expect(m.frozen).toBe(false);
   });
 
-  test('ninth waits on deck and enters after a ring-out', () => {
+  test('ninth waits on deck and enters after a knockout', () => {
     const m = withFighters(names(8));
     expect(m.fighting).toHaveLength(8);
     m.arrive(['i']);
     expect(m.onDeck).toEqual(['i']);
     expect(m.tick(1)).toEqual([]);
-    m.ringOut(['a']);
+    m.knockOut(['a']);
     const evs = m.tick(0.1);
     expect(evs).toContainEqual({ type: 'entranceStart', ids: ['i'], group: false });
     expect(m.onDeck).toEqual([]);
   });
 
-  test('ten arrivals never exceed eight in the ring, entrances never overlap', () => {
+  test('ten arrivals never exceed eight on the stage, entrances never overlap', () => {
     const m = new Match();
     let running = 0;
     const watch = (evs: MatchEvent[]) => {
@@ -124,12 +124,12 @@ describe('Match', () => {
     expect(m.tick(1)).toEqual([]);
   });
 
-  test('lone re-arms when the ring empties, so a fresh lone fighter is announced', () => {
+  test('lone re-arms when the stage empties, so a fresh lone fighter is announced', () => {
     const m = new Match();
     m.arrive(['a']);
     m.tick(0.1);
     expect(m.tick(ENTRANCE_S)).toContainEqual({ type: 'lone', id: 'a' });
-    m.ringOut(['a']);
+    m.knockOut(['a']);
     m.arrive(['b']);
     m.tick(0.1);
     expect(m.tick(ENTRANCE_S)).toContainEqual({ type: 'lone', id: 'b' });
@@ -139,40 +139,40 @@ describe('Match', () => {
     const m = withFighters(['a', 'b']);
     m.arrive(['c']);
     m.tick(0.1);
-    m.ringOut(['a']);
+    m.knockOut(['a']);
     expect(m.tick(0.1)).not.toContainEqual(expect.objectContaining({ type: 'lone' }));
   });
 
   test('two falling out together is a tie', () => {
     const m = withFighters(['a', 'b']);
-    const evs = m.ringOut(['a', 'b']);
-    expect(evs).toContainEqual({ type: 'ringOut', ids: ['a', 'b'] });
+    const evs = m.knockOut(['a', 'b']);
+    expect(evs).toContainEqual({ type: 'knockOut', ids: ['a', 'b'] });
     expect(evs).toContainEqual({ type: 'tie', ids: ['a', 'b'] });
     expect(m.fighting).toEqual([]);
   });
 
-  test('a single fighter going out alone is just a ring-out', () => {
+  test('a single fighter going out alone is just a knockout', () => {
     const m = withFighters(['a']);
-    expect(m.ringOut(['a'])).toEqual([{ type: 'ringOut', ids: ['a'] }]);
+    expect(m.knockOut(['a'])).toEqual([{ type: 'knockOut', ids: ['a'] }]);
   });
 
-  test('one left with nobody waiting holds the ring', () => {
+  test('one left with nobody waiting holds the stage', () => {
     const m = withFighters(['a', 'b', 'c']);
-    expect(m.ringOut(['a'])).toEqual([{ type: 'ringOut', ids: ['a'] }]);
-    expect(m.ringOut(['b'])).toContainEqual({ type: 'holdsRing', id: 'c' });
+    expect(m.knockOut(['a'])).toEqual([{ type: 'knockOut', ids: ['a'] }]);
+    expect(m.knockOut(['b'])).toContainEqual({ type: 'holdsStage', id: 'c' });
   });
 
-  test('one left with somebody waiting does not hold the ring', () => {
+  test('one left with somebody waiting does not hold the stage', () => {
     const m = withFighters(['a', 'b']);
     m.arrive(['c']);
     m.tick(0.1);
-    const evs = m.ringOut(['a']);
-    expect(evs).not.toContainEqual(expect.objectContaining({ type: 'holdsRing' }));
+    const evs = m.knockOut(['a']);
+    expect(evs).not.toContainEqual(expect.objectContaining({ type: 'holdsStage' }));
   });
 
-  test('ring-out of unknown ids does nothing', () => {
+  test('a knockout of unknown ids does nothing', () => {
     const m = withFighters(['a', 'b']);
-    expect(m.ringOut(['zzz'])).toEqual([]);
+    expect(m.knockOut(['zzz'])).toEqual([]);
   });
 
   test('crown picks most hits, again brings the cast back champion last (newcomers before it)', () => {
@@ -207,7 +207,7 @@ describe('Match', () => {
     expect(m.again()).toEqual([]);
   });
 
-  test('again caps at maxInRing and keeps extras on deck', () => {
+  test('again caps at maxOnStage and keeps extras on deck', () => {
     const m = withFighters(names(8));
     m.arrive(['i', 'j']);
     m.crown(new Map());
@@ -239,30 +239,21 @@ describe('Match', () => {
   });
 });
 
-describe('isOut', () => {
-  test('rules non-finite and far-away positions out', () => {
-    expect(isOut({ x: NaN, y: 1, z: 0 }, 6.5)).toBe(true);
-    expect(isOut({ x: 11, y: 0.5, z: 0 }, 6.5)).toBe(true);
-    expect(isOut({ x: 6, y: 0.5, z: 0 }, 6.5)).toBe(false);
+describe('Match on the stage (Task 15)', () => {
+  test('entrances last as long as it is told (the stage’s drop-ins), a lone one and a group one', () => {
+    const m = new Match({ entrance: 5, group: 4 });
+    m.arrive(['a']);
+    expect(m.tick(0.1)).toContainEqual({ type: 'entranceStart', ids: ['a'], group: false });
+    expect(m.tick(4.85)).toEqual([]);
+    expect(m.tick(0.1)).toContainEqual({ type: 'entranceEnd', ids: ['a'] });
+    m.arrive(['b', 'c']);
+    expect(m.tick(0.1)).toContainEqual({ type: 'entranceStart', ids: ['b', 'c'], group: true });
+    expect(m.tick(3.85)).toEqual([]);
+    expect(m.tick(0.1)).toContainEqual({ type: 'entranceEnd', ids: ['b', 'c'] });
   });
-  test('falling below the floor is out', () => {
-    expect(isOut({ x: 0, y: -2.6, z: 0 }, 6.5)).toBe(true);
-    expect(isOut({ x: 0, y: -2.4, z: 0 }, 6.5)).toBe(false);
-    expect(isOut({ x: 0, y: 0, z: Infinity }, 6.5)).toBe(true);
-  });
-});
 
-describe('isUnderFloor', () => {
-  test('a torso under the ring top, inside the ring, is under the floor', () => {
-    expect(isUnderFloor({ x: 0, y: -0.2, z: 0 }, 6.5)).toBe(true);
-    expect(isUnderFloor({ x: 3, y: -1, z: -4 }, 6.5)).toBe(true); // r = 5
-    expect(isUnderFloor({ x: 0, y: -3, z: 6.1 }, 6.5)).toBe(true); // just inside ringRadius - 0.3
-  });
-  test('on or just in the floor, near the edge, outside the ring or broken is not', () => {
-    expect(isUnderFloor({ x: 0, y: 0.5, z: 0 }, 6.5)).toBe(false); // standing
-    expect(isUnderFloor({ x: 0, y: -0.1, z: 0 }, 6.5)).toBe(false); // sunk a little: the solver pushes it out
-    expect(isUnderFloor({ x: 6.3, y: -1, z: 0 }, 6.5)).toBe(false); // falling past the edge
-    expect(isUnderFloor({ x: 9, y: -1, z: 0 }, 6.5)).toBe(false); // in the pit
-    expect(isUnderFloor({ x: NaN, y: -1, z: 0 }, 6.5)).toBe(false);
+  test('a knockout is a knockOut; the last one left holds the stage', () => {
+    const m = withFighters(['a', 'b']);
+    expect(m.knockOut(['a'])).toEqual([{ type: 'knockOut', ids: ['a'] }, { type: 'holdsStage', id: 'b' }]);
   });
 });

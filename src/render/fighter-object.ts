@@ -3,20 +3,21 @@ import {
   type Material, type Matrix4,
 } from 'three/webgpu';
 import type { BodyData, LodMesh } from '../builder/build';
-import type { RagdollLayout } from '../physics/layout';
+import type { BodyLayout } from '../anim/layout';
 import type { Recipe } from '../recipe/schema';
 import { eyePlaces, gaze, type EyePlace } from '../skin/eyes';
 import { packRegions } from '../skin/patterns';
 import { lodGeometry, restStarts } from './creature';
-import { GooglyEye, restBoneMatrices } from './drive';
+import { GooglyEye, pieceRestMatrices, restBoneMatrices } from './drive';
 import { createToonMaterial } from './toon';
 
 /**
- * A fighter's body for the ring: the skinned body (its finest level of detail) in toon colours, a dark outline on the
- * same skeleton, and googly eyes. Its bones are placed straight in the world each frame by `driveBones`.
+ * A fighter's body on the stage: the skinned body (its finest level of detail) in toon colours, a dark outline on the
+ * same skeleton, and googly eyes. Its bones are placed straight in the world each frame by `driveBonesFrom`
+ * (from posed pieces).
  */
 export type FighterObject = {
-  /** Scaled by the layout's ring scale; never turned or moved (the bones carry the fighter round the ring). */
+  /** Scaled by the layout's fighting scale; never turned or moved (the bones carry the fighter round the level). */
   root: Group;
   bones: Bone[];
   mesh: SkinnedMesh;
@@ -24,12 +25,14 @@ export type FighterObject = {
   eyes: GooglyEye[];
   /** Each bone's world matrix in the rest pose (standing at the origin facing +z), the jaw raised shut. */
   restBones: Matrix4[];
-  /** Bone → ragdoll segment (the layout's, plus a jaw it never saw on its head's segment). */
+  /** Bone → body segment (the layout's, plus a jaw it never saw on its head's segment). */
   boneSegment: number[];
+  /** Each segment's piece at rest (`pieceRestMatrices`): what `driveBonesFrom` moves the bones from. */
+  pieceRest: Matrix4[];
   dispose(): void;
 };
 
-/** The outline's colour and thickness (× the ring height, pushed out along the normals). */
+/** The outline's colour and thickness (× the fighting height, pushed out along the normals). */
 export const OUTLINE_COLOR = '#1a1030';
 export const OUTLINE_PUSH = 0.012;
 /** The pupil's radius and how far forward it sits (× the eye's radius): the spike's. */
@@ -123,7 +126,7 @@ function sharedParts() {
  * Bone i's segment: the layout's, or (a bone it never saw, such as the jaw the builder appends after meshing) its
  * parent's.
  */
-function segmentsFor(body: BodyData, layout: RagdollLayout): number[] {
+function segmentsFor(body: BodyData, layout: BodyLayout): number[] {
   const defs = body.skeleton.bones;
   if (layout.boneSegment.length > defs.length) throw new Error(`the layout has ${layout.boneSegment.length} bones, the body ${defs.length}`);
   const out: number[] = [];
@@ -132,18 +135,18 @@ function segmentsFor(body: BodyData, layout: RagdollLayout): number[] {
 }
 
 /**
- * A fighter ready for the ring: its finest level of detail skinned in toon colours (`createToonMaterial`), scaled by
- * `layout.scale`, with a back-face outline sharing its skeleton (pushed out by OUTLINE_PUSH × the ring height, colour
+ * A fighter ready for the stage: its finest level of detail skinned in toon colours (`createToonMaterial`), scaled by
+ * `layout.scale`, with a back-face outline sharing its skeleton (pushed out by OUTLINE_PUSH × the fighting height, colour
  * OUTLINE_COLOR) and a googly eye with a black pupil on every eye bone (the valley's eye placement). It stands at rest
- * until `driveBones` moves it.
+ * until `driveBonesFrom` moves it.
  */
-export function createFighterObject(body: BodyData, recipe: Recipe, layout: RagdollLayout): FighterObject {
+export function createFighterObject(body: BodyData, recipe: Recipe, layout: BodyLayout): FighterObject {
   const defs = body.skeleton.bones;
   const boneSegment = segmentsFor(body, layout);
   const root = new Group();
   root.name = 'fighter';
   root.scale.setScalar(layout.scale);
-  // flat: every bone hangs straight off the root, so driveBones can place each one in the world on its own
+  // flat: every bone hangs straight off the root, so driveBonesFrom can place each one in the world on its own
   const bones = defs.map((d) => {
     const b = new Bone();
     b.name = d.name;
@@ -161,11 +164,11 @@ export function createFighterObject(body: BodyData, recipe: Recipe, layout: Ragd
   mesh.name = 'fighter:body';
   mesh.castShadow = true;
   const parts = sharedParts();
-  const outline = new SkinnedMesh(outlineGeometry(lod, (OUTLINE_PUSH * layout.ringHeight) / layout.scale), parts.outline);
+  const outline = new SkinnedMesh(outlineGeometry(lod, (OUTLINE_PUSH * layout.fightHeight) / layout.scale), parts.outline);
   outline.name = 'fighter:outline';
   outline.castShadow = false;
   for (const m of [mesh, outline]) {
-    m.frustumCulled = false; // the bones fly round the ring, far from the bounds of the bind pose
+    m.frustumCulled = false; // the bones fly round the level, far from the bounds of the bind pose
     root.add(m);
     m.bind(skeleton);
   }
@@ -175,7 +178,7 @@ export function createFighterObject(body: BodyData, recipe: Recipe, layout: Ragd
   bones.forEach((b, i) => {
     b.position.set(starts[i].x, starts[i].y, starts[i].z);
     b.updateMatrix();
-    b.matrixAutoUpdate = false; // driveBones sets `matrix`
+    b.matrixAutoUpdate = false; // driveBonesFrom sets `matrix`
   });
   root.updateMatrixWorld(true);
   const restBones = restBoneMatrices(starts, layout.scale);
@@ -200,7 +203,7 @@ export function createFighterObject(body: BodyData, recipe: Recipe, layout: Ragd
   root.updateMatrixWorld(true);
 
   return {
-    root, bones, mesh, outline, eyes, restBones, boneSegment,
+    root, bones, mesh, outline, eyes, restBones, boneSegment, pieceRest: pieceRestMatrices(layout),
     dispose() {
       mesh.geometry.dispose();
       outline.geometry.dispose();

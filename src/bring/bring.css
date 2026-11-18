@@ -1,28 +1,28 @@
-/* ---------- the join card (bottom right, 22% of the width; for reading from the sofa, so every text is 26 px or more at 1080p) ---------- */
+/* ---------- the join card (bottom right, 13% of the width: small, owner's ruling R39; the QR code is most of it, still big enough to scan from the sofa) ---------- */
 .join-card {
   /* the inside is sized in cqw (a fraction of the card's own width), so it scales as a whole with the screen; the card's own box uses vw (cqw would look to its parent) */
-  container-type: inline-size; position: absolute; right: 3vw; bottom: 5vh; width: 22vw; box-sizing: border-box; padding: 1vw 1.1vw 1.1vw;
-  display: grid; justify-items: center; gap: 0.35vw; border-radius: 1.3vw; background: #ffffffee; color: #14405c; text-align: center;
+  container-type: inline-size; position: absolute; right: 2vw; bottom: 3vh; width: 13vw; box-sizing: border-box; padding: 0.6vw 0.6vw 0.7vw;
+  display: grid; justify-items: center; gap: 0.25vw; border-radius: 1vw; background: #ffffffee; color: #14405c; text-align: center;
   box-shadow: 0 10px 40px #0005; pointer-events: none; animation: join-in 0.3s ease-out;
 }
 .join-card[hidden] { display: none; }
 @keyframes join-in { from { opacity: 0; transform: translateY(14px); } }
-.join-qr { width: 78cqw; aspect-ratio: 1; line-height: 0; border-radius: 3cqw; overflow: hidden; }
+.join-qr { width: 88cqw; aspect-ratio: 1; line-height: 0; border-radius: 3cqw; overflow: hidden; }
 .join-qr svg { width: 100%; height: 100%; display: block; }
-.join-scan { font-size: 7.8cqw; font-weight: 900; line-height: 1.1; color: #3f8a2f; }
-.join-host { font-size: 8cqw; font-weight: 900; line-height: 1.05; overflow-wrap: anywhere; }
-.join-page { margin-top: -1.2cqw; font-size: 6.8cqw; font-weight: 800; opacity: 0.8; }
+.join-scan { font-size: 9cqw; font-weight: 900; line-height: 1.1; color: #3f8a2f; }
+.join-host { font-size: 9.5cqw; font-weight: 900; line-height: 1.05; overflow-wrap: anywhere; }
+.join-page { margin-top: -1.2cqw; font-size: 7.5cqw; font-weight: 800; opacity: 0.8; }
 .join-page:empty { display: none; }
 .join-code-row { display: flex; align-items: baseline; gap: 3cqw; }
-.join-code-label { font-size: 6.2cqw; font-weight: 800; opacity: 0.8; }
-.join-code { font-size: 17cqw; font-weight: 900; letter-spacing: 0.12em; margin-right: -0.12em; line-height: 1; }
+.join-code-label { font-size: 7.5cqw; font-weight: 800; opacity: 0.8; }
+.join-code { font-size: 22cqw; font-weight: 900; letter-spacing: 0.12em; margin-right: -0.12em; line-height: 1; }
 .join-line { display: flex; flex-wrap: wrap; justify-content: center; gap: 1.5cqw 3cqw; margin: 0; padding: 0; list-style: none; }
 .join-line:empty { display: none; }
-.join-person { display: flex; align-items: center; gap: 1.6cqw; padding: 0.8cqw 3.4cqw 0.8cqw 1.8cqw; border-radius: 999px; background: #d9efd0; font-size: 6.8cqw; font-weight: 900; }
-.join-badge { font-size: 9cqw; line-height: 1; }
+.join-person { display: flex; align-items: center; gap: 1.6cqw; padding: 0.8cqw 3.4cqw 0.8cqw 1.8cqw; border-radius: 999px; background: #d9efd0; font-size: 8cqw; font-weight: 900; }
+.join-badge { font-size: 10cqw; line-height: 1; }
 @media (prefers-reduced-motion: reduce) { .join-card { animation: none; } }
 
-/* ---------- the workshop (spec §3.2-3.3): the ring dimmed, the studio stage in the middle, read from the sofa ---------- */
+/* ---------- the workshop (spec §3.2-3.3): the level dimmed, the studio stage in the middle, read from the sofa ---------- */
 /* Sized in vh (a TV is wider than tall): the stage is 60vh high at 16:10; every text is 2.6vh (28 px at 1080p) or more. */
 .ws {
   position: absolute; inset: 0; display: grid; grid-template-rows: auto 60vh auto; justify-items: center; align-content: center;
@@ -117,7 +117,7 @@
   .ws-caption.working .ws-spin, .ws-bubble.working::before { animation: none; }
 }
 
-/* the arrival's welcome title (arrival v2): the reveal's big friendly type, fading in and out over the ring's upper third */
+/* the arrival's welcome title (arrival v2): the reveal's big friendly type, fading in and out over the stage's upper third */
 .arrive-title {
   position: absolute; left: 50%; top: 13vh; transform: translateX(-50%); z-index: 5; max-width: 86vw; pointer-events: none;
   color: #fff; font-size: 8.4vh; font-weight: 900; line-height: 1.05; letter-spacing: 0.01em; text-align: center;

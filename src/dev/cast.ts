@@ -8,19 +8,17 @@ import {
 import { BuilderClient } from '../builder/client';
 import type { Skeleton } from '../builder/skeleton';
 import { planFor } from '../fight/moves';
-import { ragdollLayout } from '../physics/layout';
-import { Ragdoll } from '../physics/ragdoll';
-import { createWorld, initPhysics } from '../physics/world';
+import { bodyLayout } from '../anim/layout';
 import { ensureFighter } from '../recipe/fighter';
 import type { Recipe } from '../recipe/schema';
-import { driveBones } from '../render/drive';
+import { driveBonesFrom, placedPieces } from '../render/drive';
 import { createFighterObject } from '../render/fighter-object';
 import { createRenderer } from '../render/renderer';
 
 /** The cast's order in the valley (tests/fixtures/cast/index.ts). */
 const ORDER = ['deer', 'rabbit', 'fox', 'wolf', 'duck', 'hawk', 'trout', 'frog'];
 const PER_ROW = 4;
-/** Gaps in metres at ring size: between a creature's two builds, between pairs, and the label band over each row. */
+/** Gaps in metres at fighting size: between a creature's two builds, between pairs, and the label band over each row. */
 const PAIR_GAP = 0.25, CELL_GAP = 0.8, LABEL = 0.55;
 /** Turned a quarter about +y, a creature facing +z faces +x: to the right, seen from the camera on +z. */
 const SIDE = Math.PI / 2;
@@ -36,7 +34,7 @@ function cast(): Recipe[] {
 const extent = (sk: Skeleton) => ({ w: sk.max.z - sk.min.z, h: sk.max.y - sk.min.y });
 
 export async function showCast(canvas: HTMLCanvasElement, opts: { shot: boolean }): Promise<void> {
-  const [{ renderer }] = await Promise.all([createRenderer(canvas, 'high'), initPhysics()]);
+  const { renderer } = await createRenderer(canvas, 'high');
   const scene = new Scene();
   scene.background = new Color('#cdeffd');
   scene.add(new HemisphereLight('#fff0ff', '#6040a0', 1.6));
@@ -55,7 +53,6 @@ export async function showCast(canvas: HTMLCanvasElement, opts: { shot: boolean 
     Promise.all(recipes.map((r) => builder.build(r))),
     Promise.all(fighters.map((f) => builder.build(f.recipe))),
   ]);
-  const world = createWorld(20);
 
   // lay the pairs out in rows: the original on the left, the fighter on the right, both facing right, at the fighter's scale
   type Cell = { name: string; fixes: string; x: number; w: number; wO: number; h: number; place(base: number): void };
@@ -63,7 +60,7 @@ export async function showCast(canvas: HTMLCanvasElement, opts: { shot: boolean 
   let width = 0;
   recipes.forEach((recipe, i) => {
     const sk = stood[i].skeleton, skO = originals[i].skeleton;
-    const layout = ragdollLayout(sk, planFor(fighters[i].recipe, sk));
+    const layout = bodyLayout(sk, planFor(fighters[i].recipe, sk));
     const s = layout.scale;
     const o = extent(skO), f = extent(sk);
     if (i % PER_ROW === 0) rows.push({ cells: [], base: 0, h: 0 });
@@ -71,17 +68,15 @@ export async function showCast(canvas: HTMLCanvasElement, opts: { shot: boolean 
     const x = row.cells.reduce((t, c) => t + c.w + CELL_GAP, 0);
     const place = (base: number) => {
       // the original as the valley built it: its rest pose, not driven (so its root may move and turn)
-      const orig = createFighterObject(originals[i], recipe, ragdollLayout(skO, planFor(recipe, skO)));
+      const orig = createFighterObject(originals[i], recipe, bodyLayout(skO, planFor(recipe, skO)));
       orig.root.scale.setScalar(s);
       orig.root.rotation.y = SIDE;
       orig.root.position.set(x - skO.min.z * s, base - skO.min.y * s, 0);
       scene.add(orig.root);
-      // the fighter, posed standing by its ragdoll as the ring shows it (its root stays put: the bones are placed in the world)
-      const rag = new Ragdoll(world, layout, { bounce: 0.35 });
-      rag.pose(new V3(x + o.w * s + PAIR_GAP - sk.min.z * s, base, 0), SIDE);
+      // the fighter, standing at rest (its root stays put: the bones are placed in the world)
       const obj = createFighterObject(stood[i], fighters[i].recipe, layout);
       scene.add(obj.root);
-      driveBones(obj, rag);
+      driveBonesFrom(obj, placedPieces(obj.pieceRest, new V3(x + o.w * s + PAIR_GAP - sk.min.z * s, base, 0), SIDE));
     };
     const cell: Cell = { name: recipe.name, fixes: fighters[i].fixes.join('; '), x, w: (o.w + f.w) * s + PAIR_GAP, wO: o.w * s, h: Math.max(o.h, f.h) * s, place };
     row.cells.push(cell);
@@ -160,5 +155,5 @@ export async function showCast(canvas: HTMLCanvasElement, opts: { shot: boolean 
   }
   renderer.setAnimationLoop(() => renderer.render(scene, camera));
   console.table(rows.flatMap((r) => r.cells).map((c) => ({ name: c.name, standUp: c.fixes })));
-  Object.assign(window, { __cast: { scene, camera, renderer, world } });
+  Object.assign(window, { __cast: { scene, camera, renderer } });
 }

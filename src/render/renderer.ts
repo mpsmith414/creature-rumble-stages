@@ -1,4 +1,5 @@
 import { AgXToneMapping, PCFSoftShadowMap, WebGPURenderer } from 'three/webgpu';
+import { TONE_EXPOSURE } from './tone';
 import { QUALITY, type Tier } from './quality';
 
 export type Backend = 'webgpu' | 'webgl2';
@@ -10,7 +11,7 @@ export async function createRenderer(canvas: HTMLCanvasElement, tier: Tier): Pro
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, QUALITY[tier].pixelRatio));
   renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
   renderer.toneMapping = AgXToneMapping;
-  renderer.toneMappingExposure = 0.95;
+  renderer.toneMappingExposure = TONE_EXPOSURE;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
   await renderer.init();

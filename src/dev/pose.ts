@@ -5,11 +5,9 @@ import {
 } from 'three/webgpu';
 import { BuilderClient } from '../builder/client';
 import { planFor } from '../fight/moves';
-import { ragdollLayout } from '../physics/layout';
-import { Ragdoll } from '../physics/ragdoll';
-import { createWorld, initPhysics } from '../physics/world';
+import { bodyLayout } from '../anim/layout';
 import type { Recipe } from '../recipe/schema';
-import { driveBones } from '../render/drive';
+import { driveBonesFrom, placedPieces } from '../render/drive';
 import { createFighterObject } from '../render/fighter-object';
 import { createRenderer } from '../render/renderer';
 import { toonGradient } from '../render/toon';
@@ -27,7 +25,7 @@ export function fixtures(): Recipe[] {
 }
 
 export async function showPoses(canvas: HTMLCanvasElement, opts: { shot: boolean }): Promise<void> {
-  const [{ renderer }] = await Promise.all([createRenderer(canvas, 'high'), initPhysics()]);
+  const { renderer } = await createRenderer(canvas, 'high');
   const fit = () => {
     renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
     camera.aspect = canvas.clientWidth / Math.max(1, canvas.clientHeight);
@@ -55,20 +53,17 @@ export async function showPoses(canvas: HTMLCanvasElement, opts: { shot: boolean
   const recipes = fixtures();
   const builder = new BuilderClient();
   const bodies = await Promise.all(recipes.map((r) => builder.build(r)));
-  const world = createWorld(20);
   const row = bodies.map((body, i) => {
     const sk = body.skeleton;
-    const layout = ragdollLayout(sk, planFor(recipes[i], sk));
-    return { body, recipe: recipes[i], layout, width: (sk.max.x - sk.min.x) * layout.scale, height: layout.ringHeight };
+    const layout = bodyLayout(sk, planFor(recipes[i], sk));
+    return { body, recipe: recipes[i], layout, width: (sk.max.x - sk.min.x) * layout.scale, height: layout.fightHeight };
   });
   const total = row.reduce((t, f) => t + f.width, 0) + GAP * (row.length - 1);
   let x = -total / 2;
   for (const f of row) {
-    const rag = new Ragdoll(world, f.layout, { bounce: 0.35 });
-    rag.pose(new V3(x + f.width / 2, 0, 0), 0); // standing at rest, facing the camera (no physics step)
     const obj = createFighterObject(f.body, f.recipe, f.layout);
     scene.add(obj.root);
-    driveBones(obj, rag);
+    driveBonesFrom(obj, placedPieces(obj.pieceRest, new V3(x + f.width / 2, 0, 0), 0)); // standing at rest, facing the camera
     x += f.width + GAP;
   }
   const tall = Math.max(...row.map((f) => f.height));
@@ -86,5 +81,5 @@ export async function showPoses(canvas: HTMLCanvasElement, opts: { shot: boolean
     console.info('saved .shots/fighters.png');
   }
   renderer.setAnimationLoop(() => renderer.render(scene, camera));
-  Object.assign(window, { __pose: { scene, camera, renderer, world } });
+  Object.assign(window, { __pose: { scene, camera, renderer } });
 }

@@ -10,9 +10,9 @@ import type { Relay, Sink } from './relay';
 const HostBody = z.object({ port: z.number().int().min(1).max(65535) });
 const JoinBody = z.object({ code: z.string().max(16), name: z.string().max(200), badge: z.string().max(16), token: z.string().max(100).optional() });
 const TweakBody = z.object({ words: z.string().max(500) });
-/** A stage message needs the token of the phone on stage; a ring is for every phone and needs none. */
+/** A stage message needs the token of the phone on stage; match news is for every phone and needs none. */
 const HostSendBody = HostSendSchema.and(z.object({ token: z.string().optional() }));
-/** A phone's ring command: its token and a strictly shaped command (unknown kinds and long ids are refused). */
+/** A phone's match command: its token and a strictly shaped command (unknown kinds and long ids are refused). */
 const CommandBody = z.object({ token: z.string().min(1).max(100), command: PhoneCommandSchema });
 
 const body = (c: Context) => c.req.json().catch(() => null);
@@ -81,7 +81,7 @@ export function relayRoutes(app: Hono, relay: Relay, cap: DailyCap, opts: { host
 
   app.post('/api/relay/host/send', async (c) => {
     const req = HostSendBody.safeParse(await body(c));
-    if (!req.success || (req.data.type !== 'ring' && req.data.token === undefined)) return bad(c);
+    if (!req.success || (req.data.type !== 'match' && req.data.token === undefined)) return bad(c);
     return relay.fromHost(c.req.query('h') ?? '', req.data) ? c.json({ ok: true }) : c.json({ error: 'unknown' }, 404);
   });
 
@@ -119,7 +119,7 @@ export function relayRoutes(app: Hono, relay: Relay, cap: DailyCap, opts: { host
   });
 
   /**
-   * A phone asks the ring for something: crown the champion, again, or send a roster creature back in. Only a phone the
+   * A phone asks the match for something: crown the champion, again, or send a roster creature back in. Only a phone the
    * relay knows may (401 otherwise), a few times a second at most (429). What it does is the TV's call.
    */
   app.post('/api/phone/command', async (c) => {

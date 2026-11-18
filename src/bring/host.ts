@@ -1,11 +1,11 @@
-import { ringEntry, ringRoster, type HostMsg, type HostSend, type PhoneCommand, type RingEntry, type RingPhase, type RingSend } from './protocol';
+import { rosterEntry, cappedRoster, type HostMsg, type HostSend, type PhoneCommand, type RosterEntry, type MatchPhase, type MatchSend } from './protocol';
 
 /**
  * The TV's side of the phone relay: register as the host, keep the event stream open, answer the phone on stage, hear
- * the phones' ring commands (`onCommand`) and tell every phone how the ring stands (`sendRing`). When the stream drops it
+ * the phones' match commands (`onCommand`) and tell every phone how the match stands (`sendMatch`). When the stream drops it
  * first asks the relay (`GET /api/relay/host/status`, since an EventSource cannot see a 404) whether its own host id
  * still stands: `current` reattaches with the same id (nobody is told anything), `unknown` (the server restarted)
- * registers afresh (and sends the last ring again), and `replaced` (a newer TV page took over) stops for good: a
+ * registers afresh (and sends the last match news again), and `replaced` (a newer TV page took over) stops for good: a
  * replaced page only hosts again when asked to with `reclaim()`.
  */
 
@@ -34,8 +34,8 @@ export class HostClient {
   /** Counts connection attempts: a stream or a sleep from an earlier attempt must not act. */
   private attempt = 0;
   private readonly commandListeners = new Set<(token: string, command: PhoneCommand) => void>();
-  /** The last ring sent, sent again after a fresh registration (a new relay knows no ring). */
-  private lastRing: RingSend | null = null;
+  /** The last match news sent, sent again after a fresh registration (a new relay knows none). */
+  private lastMatch: MatchSend | null = null;
 
   constructor(private readonly ev: HostEvents, private readonly deps: Deps = {}) {}
 
@@ -56,29 +56,29 @@ export class HostClient {
   }
 
   /**
-   * Tell every phone how the ring stands: the match phase, how many are fighting, and the roster to send back in (the
+   * Tell every phone how the match stands: the match phase, how many are fighting, and the roster to send back in (the
    * roster's newest-first summaries; at most 60 go, champions first). Call it on every match phase change and roster
    * change. Each entry is checked first: a bad thumb is dropped, an entry that cannot be sent is left out, so one bad
-   * entry does not get the whole ring refused. False when the relay did not take it (it is still sent again after the
+   * entry does not get the whole news refused. False when the relay did not take it (it is still sent again after the
    * next fresh registration).
    */
-  async sendRing(phase: RingPhase, fighting: number, roster: readonly RingEntry[]): Promise<boolean> {
-    const fit = roster.map(ringEntry).filter((e): e is RingEntry => e !== null);
-    this.lastRing = { type: 'ring', phase, fighting: Math.max(0, Math.floor(fighting)), roster: ringRoster(fit) };
-    return this.postRing(this.lastRing);
+  async sendMatch(phase: MatchPhase, fighting: number, roster: readonly RosterEntry[]): Promise<boolean> {
+    const fit = roster.map(rosterEntry).filter((e): e is RosterEntry => e !== null);
+    this.lastMatch = { type: 'match', phase, fighting: Math.max(0, Math.floor(fighting)), roster: cappedRoster(fit) };
+    return this.postMatch(this.lastMatch);
   }
 
-  /** Hear the phones' ring commands (crown, again, sendBack) with the token of the phone that sent it. They do not go to
+  /** Hear the phones' match commands (crown, again, sendBack) with the token of the phone that sent it. They do not go to
    * `onMsg`. Returns the way to stop. */
   onCommand(fn: (token: string, command: PhoneCommand) => void): () => void {
     this.commandListeners.add(fn);
     return () => void this.commandListeners.delete(fn);
   }
 
-  private async postRing(ring: RingSend): Promise<boolean> {
+  private async postMatch(news: MatchSend): Promise<boolean> {
     if (!this.hostId) return false;
     try {
-      const res = await this.fetch(`/api/relay/host/send?h=${encodeURIComponent(this.hostId)}`, { ...JSON_POST, body: JSON.stringify(ring) });
+      const res = await this.fetch(`/api/relay/host/send?h=${encodeURIComponent(this.hostId)}`, { ...JSON_POST, body: JSON.stringify(news) });
       return res.ok;
     } catch {
       return false;
@@ -124,7 +124,7 @@ export class HostClient {
     this.info = { code: info.code, url: info.url, qrSvg: info.qrSvg };
     this.ev.onStatus('hosting', this.info, true);
     this.open(info.hostId, mine); // straight away: the relay holds the host's messages only until its stream attaches
-    if (this.lastRing) void this.postRing(this.lastRing); // a new relay knows no ring: the phones hear the last one again
+    if (this.lastMatch) void this.postMatch(this.lastMatch); // a new relay knows no match news: the phones hear the last one again
   }
 
   /** Open the event stream for a host id. */

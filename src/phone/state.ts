@@ -1,4 +1,4 @@
-import type { Maker, PhoneMsg, Ring, StepMsg } from '../bring/protocol';
+import type { Maker, PhoneMsg, MatchNow, StepMsg } from '../bring/protocol';
 import type { KidCards } from '../designer/types';
 
 /** The phone page's screen flow as a pure reducer (types only from shared modules: the phone bundle loads no three.js). */
@@ -16,24 +16,24 @@ export type PhoneState = {
   /** The finished outcome the kid already acknowledged; the relay keeps reporting it until the next submit, so a
    * rejoin's `hello` with that phase means "idle" (stay on make), not news. Cleared by a submit or a new turn. */
   seen?: Finished;
-  /** How the ring stands (the TV's last word): it survives every screen change but `noHost` (the TV may come back new). */
-  ring?: Ring;
+  /** How the match stands (the TV's last word): it survives every screen change but `noHost` (the TV may come back new). */
+  match?: MatchNow;
   /** Which tab shows (absent: `flow`). News that changes the screen brings the kid back to `flow`. */
   tab?: Tab;
 };
-/** The relay's ring news: as a `msg`, or on its own (the same thing). */
-export type RingNews = Extract<PhoneMsg, { type: 'ring' }>;
+/** The relay's match news: as a `msg`, or on its own (the same thing). */
+export type MatchNews = Extract<PhoneMsg, { type: 'match' }>;
 export type Action =
   | { type: 'msg'; msg: PhoneMsg } | { type: 'joined'; maker: Maker } | { type: 'rescan' }
   | { type: 'draft'; hasImage?: boolean; words?: string } | { type: 'submitted' } | { type: 'again' }
-  | RingNews | { type: 'tab'; tab: Tab };
+  | MatchNews | { type: 'tab'; tab: Tab };
 
 export const initial: PhoneState = { screen: 'join', maker: null, draft: { hasImage: false, words: '' } };
 
-/** A fresh screen: only the maker, the draft, the acknowledged outcome and the ring carry over, so nothing stale (a
+/** A fresh screen: only the maker, the draft, the acknowledged outcome and the match news carry over, so nothing stale (a
  * place, a note) leaks into it. The tab stays only while the screen does (news of a new screen is worth seeing). */
 const to = (s: PhoneState, screen: Screen, extra: Partial<PhoneState> = {}): PhoneState => ({
-  screen, maker: s.maker, draft: s.draft, ...(s.seen ? { seen: s.seen } : {}), ...(s.ring ? { ring: s.ring } : {}),
+  screen, maker: s.maker, draft: s.draft, ...(s.seen ? { seen: s.seen } : {}), ...(s.match ? { match: s.match } : {}),
   ...(s.tab && screen === s.screen ? { tab: s.tab } : {}), ...extra,
 });
 /** The same without the acknowledged outcome: a new turn has begun. */
@@ -65,9 +65,9 @@ function onMsg(s: PhoneState, m: PhoneMsg): PhoneState {
     case 'kept': return fresh(s, 'kept');
     case 'failed': return fresh(s, 'failed', { message: m.message, retry: m.retry });
     case 'resting': return fresh(s, 'resting');
-    // not news of a turn: the acknowledgement stands. The ring goes: the TV that comes back may have a new match
-    case 'noHost': return to({ ...s, ring: undefined }, 'noHost');
-    case 'ring': return { ...s, ring: { phase: m.phase, fighting: m.fighting, roster: m.roster } }; // no screen change
+    // not news of a turn: the acknowledgement stands. The match news goes: the TV that comes back may have a new match
+    case 'noHost': return to({ ...s, match: undefined }, 'noHost');
+    case 'match': return { ...s, match: { phase: m.phase, fighting: m.fighting, roster: m.roster } }; // no screen change
   }
 }
 
@@ -80,7 +80,7 @@ export function reduce(s: PhoneState, a: Action): PhoneState {
     case 'draft': return { ...s, draft: { hasImage: a.hasImage ?? s.draft.hasImage, words: a.words ?? s.draft.words } };
     case 'submitted': return fresh(s, 'waiting');
     case 'again': return to(s, 'make', finished(s.screen) ? { seen: s.screen } : {});
-    case 'ring': return onMsg(s, a);
+    case 'match': return onMsg(s, a);
     case 'tab': return { ...s, tab: a.tab };
   }
 }
@@ -88,9 +88,9 @@ export function reduce(s: PhoneState, a: Action): PhoneState {
 /** Screens with the Make / Fighters tabs: everywhere once the phone has joined and the TV is there. */
 export const showsTabs = (s: PhoneState): boolean => s.screen !== 'join' && s.screen !== 'rescan' && s.screen !== 'noHost';
 
-/** What the ring offers a phone: Crown while the match is open with someone fighting, Again once crowned. */
-export function ringButtons(s: PhoneState): { crown: boolean; again: boolean } {
-  const r = s.ring;
+/** What the match offers a phone: Crown while the match is open with someone fighting, Again once crowned. */
+export function matchButtons(s: PhoneState): { crown: boolean; again: boolean } {
+  const r = s.match;
   return { crown: r?.phase === 'open' && r.fighting >= 1, again: r?.phase === 'crowned' };
 }
 

@@ -262,7 +262,7 @@ describe('connect: actions', () => {
   });
 });
 
-describe('connect: ring commands (Task 16)', () => {
+describe('connect: match commands (Task 16)', () => {
   async function ready(routes: Record<string, () => Reply>) {
     const store = memoryStore();
     const { fn, calls } = fakeFetch({ '/api/relay/join': () => ({ json: { token: 'tok1' } }), ...routes });

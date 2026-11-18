@@ -3,7 +3,7 @@ import './show.css';
 
 /** The comic words a landed hit pops (spec §4). */
 export const POP_WORDS = ['BONK!', 'POW!', 'BOING!', 'WHAM!', 'SPLAT!', 'BOP!', 'KAPOW!', 'THWACK!'] as const;
-/** Popped over a fighter knocked out of the ring, and over a show-off. */
+/** Popped over a fighter knocked off the stage, and over a show-off. */
 export const BYE_BYE = 'BYE BYE!', TA_DA = 'TA-DA!';
 const COLOURS = ['#ffe14d', '#ff5ad1', '#3ec7ff', '#7dff5a', '#ff7a2f'];
 /** How many words can be in the air at once (the oldest is reused), and how long one lasts (ms, = the CSS animation). */

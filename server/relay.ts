@@ -1,12 +1,12 @@
 import {
-  CODE_LETTERS, EMPTY_RING, ringRoster, type DesignInput, type HostMsg, type HostSend, type Maker, type PhoneCommand, type PhoneMsg, type PhoneSnapshot, type Ring,
+  CODE_LETTERS, EMPTY_MATCH, cappedRoster, type DesignInput, type HostMsg, type HostSend, type Maker, type PhoneCommand, type PhoneMsg, type PhoneSnapshot, type MatchNow,
 } from '../src/bring/protocol';
 import type { KidCards } from '../src/designer/types';
 
 export type Sink<M> = (msg: M) => void;
 export type RelayOptions = {
   now: () => number; id: () => string; code?: string; quietMs?: number; awayMs?: number; maxTweaks?: number;
-  /** Ring commands one phone may send per second (kids mash buttons); more are refused as `slow`. Default 5. */
+  /** Match commands one phone may send per second (kids mash buttons); more are refused as `slow`. Default 5. */
   commandsPerSecond?: number;
 };
 
@@ -21,7 +21,7 @@ type Phone = {
   /** Quiet with no stream for `awayMs` while not in the line or on stage: the host was told `left` (the card counts
    * who is here). The phone keeps its token and its screen; anything it does brings it back with `joined`. */
   away: boolean;
-  /** When its last few ring commands were taken (at most `commandsPerSecond`, oldest first), for the rate limit. */
+  /** When its last few match commands were taken (at most `commandsPerSecond`, oldest first), for the rate limit. */
   commandTimes: number[];
 };
 
@@ -42,8 +42,8 @@ export class Relay {
   private readonly awayMs: number;
   private readonly maxTweaks: number;
   private readonly commandsPerSecond: number;
-  /** The last ring the host sent (capped), so a phone that connects later hears it after its hello. */
-  private lastRing: Ring | null = null;
+  /** The match news the host last sent (capped), so a phone that connects later hears it after its hello. */
+  private lastMatch: MatchNow | null = null;
   private host: { id: string; sink: Sink<HostMsg> | null; url: string } | null = null;
   /** Ids of hosts that were replaced (the last few): a page that finds its own id here must not take hosting back by itself. */
   private readonly replacedIds: string[] = [];
@@ -66,12 +66,12 @@ export class Relay {
   }
 
   /** A TV page becomes the host; a previous host is sent `replaced` and dropped. Returns the host id. Its match is new,
-   * so the last ring is forgotten until it sends its own, and phones that heard one are told the ring is empty for now
+   * so the last match news is forgotten until it sends its own, and phones that heard one are told the match is empty for now
    * (no stale Crown or roster buttons). */
   registerHost(sink: Sink<HostMsg>, url: string): string {
     this.host?.sink?.({ type: 'replaced' });
-    if (this.lastRing) for (const p of this.phones.values()) this.toPhone(p, { type: 'ring', ...EMPTY_RING });
-    this.lastRing = null;
+    if (this.lastMatch) for (const p of this.phones.values()) this.toPhone(p, { type: 'match', ...EMPTY_MATCH });
+    this.lastMatch = null;
     if (this.host) this.replacedIds.push(this.host.id);
     if (this.replacedIds.length > 50) this.replacedIds.shift();
     this.host = { id: this.id(), sink, url };
@@ -118,14 +118,14 @@ export class Relay {
   }
 
   /** Attach a phone's SSE sink (replacing any earlier one); false for an unknown token. Sends `hello` (and the last
-   * ring, if the TV has sent one). */
+   * match news, if the TV has sent one). */
   phoneStream(token: string, sink: Sink<PhoneMsg>): boolean {
     const p = this.phones.get(token);
     if (!p) return false;
     this.touch(p);
     p.sink = sink;
     sink({ type: 'hello', state: this.snapshotOf(p) });
-    if (!this.hasHost()) { sink({ type: 'noHost' }); p.noHostSent = true; } else if (this.lastRing) sink({ type: 'ring', ...this.lastRing });
+    if (!this.hasHost()) { sink({ type: 'noHost' }); p.noHostSent = true; } else if (this.lastMatch) sink({ type: 'match', ...this.lastMatch });
     return true;
   }
 
@@ -196,7 +196,7 @@ export class Relay {
   }
 
   /**
-   * A phone asks the ring for something (crown, again, send a roster creature back in). It goes to the host as it is;
+   * A phone asks the match for something (crown, again, send a roster creature back in). It goes to the host as it is;
    * the TV decides what it means right now. `slow` once this phone has sent `commandsPerSecond` in the last second.
    */
   command(token: string, command: PhoneCommand): 'sent' | 'slow' | 'noHost' | 'unknown' {
@@ -212,12 +212,12 @@ export class Relay {
     return 'sent';
   }
 
-  /** The host's ring (on every match phase or roster change) goes to every phone, its roster capped by `ringRoster`.
+  /** The host's match news (on every match phase or roster change) goes to every phone, its roster capped by `cappedRoster`.
    * False when `hostId` is not the host. */
-  ring(hostId: string, ring: Ring): boolean {
+  match(hostId: string, now: MatchNow): boolean {
     if (!this.host || this.host.id !== hostId) return false;
-    this.lastRing = { phase: ring.phase, fighting: ring.fighting, roster: ringRoster(ring.roster) };
-    for (const p of this.phones.values()) this.toPhone(p, { type: 'ring', ...this.lastRing });
+    this.lastMatch = { phase: now.phase, fighting: now.fighting, roster: cappedRoster(now.roster) };
+    for (const p of this.phones.values()) this.toPhone(p, { type: 'match', ...this.lastMatch });
     return true;
   }
 
@@ -231,10 +231,10 @@ export class Relay {
     this.toHost({ type: 'left', token });
   }
 
-  /** The TV host reports on the phone on stage; `released`, `kept` and `failed` end the turn. A `ring` is for every
-   * phone (see `ring`; its token is not needed). */
+  /** The TV host reports on the phone on stage; `released`, `kept` and `failed` end the turn. A `match` is for every
+   * phone (see `match`; its token is not needed). */
   fromHost(hostId: string, msg: HostSend & { token?: string }): boolean {
-    if (msg.type === 'ring') return this.ring(hostId, msg);
+    if (msg.type === 'match') return this.match(hostId, msg);
     if (msg.token === undefined) return false;
     if (!this.host || this.host.id !== hostId || this.onStage !== msg.token) return false;
     const p = this.phones.get(msg.token);
@@ -357,7 +357,7 @@ export class Relay {
       if (!p.noHostSent) continue;
       p.noHostSent = false;
       this.toPhone(p, { type: 'hello', state: this.snapshotOf(p) });
-      if (this.lastRing) this.toPhone(p, { type: 'ring', ...this.lastRing });
+      if (this.lastMatch) this.toPhone(p, { type: 'match', ...this.lastMatch });
     }
     for (const p of this.phones.values()) if (!p.away) this.toHost({ type: 'joined', token: p.token, maker: p.maker });
     if (this.line.length) this.toHost(this.lineMsg());

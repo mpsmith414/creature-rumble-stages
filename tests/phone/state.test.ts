@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PhoneMsg } from '../../src/bring/protocol';
-import { CROWN_HOLD_S, draftSpent, holdProgress, initial, reduce, ringButtons, showsTabs, type Action, type PhoneState } from '../../src/phone/state';
+import { CROWN_HOLD_S, draftSpent, holdProgress, initial, reduce, matchButtons, showsTabs, type Action, type PhoneState } from '../../src/phone/state';
 
 const maker = { name: 'Zig', badge: '🦊' };
 const cards = { name: 'Zib', eats: 'leaves 🍃', speed: 'zippy ⚡', mood: 'shy 🌸', special: 'glows' };
@@ -196,17 +196,17 @@ describe('an acknowledged outcome stays acknowledged (ruling R8)', () => {
   });
 });
 
-describe('the ring on the phone: crown, again and the Fighters tab (Task 16)', () => {
+describe('the match on the phone: crown, again and the Fighters tab (Task 16)', () => {
   const fighter = (id: string, crowns = 0) => ({ id, name: `Fighter ${id}`, maker: 'Zig', crowns, thumb: null });
-  const ring = (phase: 'open' | 'crowned', fighting = 2) => ({ type: 'ring' as const, phase, fighting, roster: [fighter('r1', 1), fighter('r2')] });
+  const matchMsg = (phase: 'open' | 'crowned', fighting = 2) => ({ type: 'match' as const, phase, fighting, roster: [fighter('r1', 1), fighter('r2')] });
 
   it('phone shows Crown in open and Again in crowned', () => {
-    expect(ringButtons(reduce(joined, ring('open')))).toEqual({ crown: true, again: false });
-    expect(ringButtons(reduce(joined, ring('crowned')))).toEqual({ crown: false, again: true });
-    expect(ringButtons(reduce(joined, ring('open', 0)))).toEqual({ crown: false, again: false }); // nobody fighting: nothing to crown
-    expect(ringButtons(joined)).toEqual({ crown: false, again: false }); // the TV has not said yet
+    expect(matchButtons(reduce(joined, matchMsg('open')))).toEqual({ crown: true, again: false });
+    expect(matchButtons(reduce(joined, matchMsg('crowned')))).toEqual({ crown: false, again: true });
+    expect(matchButtons(reduce(joined, matchMsg('open', 0)))).toEqual({ crown: false, again: false }); // nobody fighting: nothing to crown
+    expect(matchButtons(joined)).toEqual({ crown: false, again: false }); // the TV has not said yet
     // the same news from the relay's stream
-    expect(ringButtons(msg(joined, ring('crowned')))).toEqual({ crown: false, again: true });
+    expect(matchButtons(msg(joined, matchMsg('crowned')))).toEqual({ crown: false, again: true });
   });
 
   it('crown needs a 2 s hold', () => {
@@ -219,26 +219,26 @@ describe('the ring on the phone: crown, again and the Fighters tab (Task 16)', (
     expect(holdProgress(-1)).toBe(0);
   });
 
-  it('the ring changes no screen, no draft and no acknowledged outcome', () => {
+  it('the match broadcast changes no screen, no draft and no acknowledged outcome', () => {
     const s = reduce(reduce(reduce(joined, { type: 'draft', words: 'a fox' }), { type: 'msg', msg: { type: 'released' } }), { type: 'again' });
-    const r = reduce(s, ring('open'));
+    const r = reduce(s, matchMsg('open'));
     expect(r).toMatchObject({ screen: 'make', seen: 'released', draft: { words: 'a fox' } });
-    expect(r.ring).toEqual({ phase: 'open', fighting: 2, roster: [fighter('r1', 1), fighter('r2')] });
+    expect(r.match).toEqual({ phase: 'open', fighting: 2, roster: [fighter('r1', 1), fighter('r2')] });
   });
 
-  it('the ring stays known across screens', () => {
-    let s = reduce(joined, ring('open'));
+  it('the match stays known across screens', () => {
+    let s = reduce(joined, matchMsg('open'));
     for (const m of [{ type: 'line', place: 2, ahead: [] }, { type: 'step', step: { kind: 'building' } }, { type: 'released' }, { type: 'resting' }] as PhoneMsg[]) {
       s = msg(s, m);
-      expect(s.ring?.phase).toBe('open');
+      expect(s.match?.phase).toBe('open');
     }
-    expect(reduce(s, { type: 'again' }).ring?.phase).toBe('open');
+    expect(reduce(s, { type: 'again' }).match?.phase).toBe('open');
   });
 
-  it('noHost forgets the ring (the TV that comes back may have a new match): no stale Crown or roster', () => {
-    const s = msg(reduce(joined, ring('open')), { type: 'noHost' });
-    expect(s.ring).toBeUndefined();
-    expect(ringButtons(msg(s, { type: 'hello', state: { phase: 'idle' } }))).toEqual({ crown: false, again: false });
+  it('noHost forgets the match (the TV that comes back may have a new match): no stale Crown or roster', () => {
+    const s = msg(reduce(joined, matchMsg('open')), { type: 'noHost' });
+    expect(s.match).toBeUndefined();
+    expect(matchButtons(msg(s, { type: 'hello', state: { phase: 'idle' } }))).toEqual({ crown: false, again: false });
   });
 
   it('the Fighters tab opens and closes, and only where there are tabs', () => {
@@ -252,7 +252,7 @@ describe('the ring on the phone: crown, again and the Fighters tab (Task 16)', (
   it('news that changes the screen brings the kid back from Fighters to it; a new place in line does not', () => {
     const waiting = reduce(msg(joined, { type: 'line', place: 3, ahead: [] }), { type: 'tab', tab: 'fighters' });
     expect(msg(waiting, { type: 'line', place: 2, ahead: [] }).tab).toBe('fighters');
-    expect(reduce(waiting, ring('crowned')).tab).toBe('fighters');
+    expect(reduce(waiting, matchMsg('crowned')).tab).toBe('fighters');
     expect(msg(waiting, { type: 'preview', cards, tweaksLeft: 5 }).tab ?? 'flow').toBe('flow');
   });
 });

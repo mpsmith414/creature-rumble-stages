@@ -1,19 +1,18 @@
 import { Matrix4, Quaternion, Vector3 } from 'three/webgpu';
-import { beforeAll, describe, expect, it, test, vi } from 'vitest';
+import { describe, expect, it, test, vi } from 'vitest';
 import { builtBody } from '../fixtures/built';
 import { buildSkeleton } from '../../src/builder/skeleton';
 import { planFor } from '../../src/fight/moves';
-import { ragdollLayout } from '../../src/physics/layout';
-import { Ragdoll } from '../../src/physics/ragdoll';
-import { createWorld, initPhysics } from '../../src/physics/world';
-import { boneWorld, driveBones, GooglyEye, PUPIL_MAX, pieceRestMatrices, restBoneMatrices } from '../../src/render/drive';
+import { bodyLayout } from '../../src/anim/layout';
+import { restPiece } from '../../src/anim/rest';
+import { boneWorld, driveBonesFrom, GooglyEye, PUPIL_MAX, pieceRestMatrices, placedPieces, restBoneMatrices } from '../../src/render/drive';
 import { createFighterObject, OUTLINE_COLOR, OUTLINE_PUSH, seatEye } from '../../src/render/fighter-object';
 import { eyePlaces } from '../../src/skin/eyes';
 import { loadFixture } from '../fixtures/fighters';
 
 const fists = loadFixture('fists');
 const fistsSk = buildSkeleton(fists);
-const fistsLayout = ragdollLayout(fistsSk, planFor(fists, fistsSk));
+const fistsLayout = bodyLayout(fistsSk, planFor(fists, fistsSk));
 
 const close = (a: Matrix4, b: Matrix4, eps = 1e-6) => a.elements.forEach((x, k) => expect(x).toBeCloseTo(b.elements[k], -Math.log10(eps)));
 const xAxis = (m: Matrix4) => new Vector3().setFromMatrixColumn(m, 0).normalize();
@@ -100,11 +99,10 @@ describe('GooglyEye', () => {
 });
 
 describe('createFighterObject', () => {
-  beforeAll(initPhysics);
   const body = builtBody(fists, [2]);
-  const layout = ragdollLayout(body.skeleton, planFor(fists, body.skeleton));
+  const layout = bodyLayout(body.skeleton, planFor(fists, body.skeleton));
 
-  it('is the body scaled to the ring, with a dark back-face outline on the same skeleton', () => {
+  it('is the body scaled to its fighting size, with a dark back-face outline on the same skeleton', () => {
     const f = createFighterObject(body, fists, layout);
     expect(f.root.scale.x).toBeCloseTo(layout.scale, 9);
     expect(f.bones).toHaveLength(body.skeleton.bones.length);
@@ -114,7 +112,7 @@ describe('createFighterObject', () => {
     expect(m.side).toBe(1); // BackSide
     expect('#' + m.color.getHexString()).toBe(OUTLINE_COLOR);
     // pushed out along the normals by 0.012 × ring height (in ring metres; the geometry is in creature metres)
-    const push = (OUTLINE_PUSH * layout.ringHeight) / layout.scale;
+    const push = (OUTLINE_PUSH * layout.fightHeight) / layout.scale;
     const p = body.lods[0].positions, n = body.lods[0].normals, q = f.outline.geometry.attributes.position.array;
     for (let k = 0; k < p.length; k += 97) expect(q[k]).toBeCloseTo(p[k] + n[k] * push, 6);
     expect(f.outline.geometry.index!.array).toBe(body.lods[0].indices);
@@ -147,13 +145,10 @@ describe('createFighterObject', () => {
     f.dispose();
   });
 
-  it('skins the body where its ragdoll stands: posed and turned, every vertex goes with it', () => {
-    const world = createWorld(20);
-    const rag = new Ragdoll(world, layout, { bounce: 0.35 });
+  it('skins the body where its pieces are placed: moved and turned, every vertex goes with it', () => {
     const f = createFighterObject(body, fists, layout);
     const at = new Vector3(3, 0, -1), yaw = Math.PI / 2;
-    rag.pose(at, yaw);
-    driveBones(f, rag);
+    driveBonesFrom(f, placedPieces(f.pieceRest, at, yaw));
     f.root.updateMatrixWorld(true);
     const q = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), yaw);
     const pos = f.mesh.geometry.attributes.position;
@@ -170,20 +165,31 @@ describe('createFighterObject', () => {
     const want = new Vector3(place.centre.x, place.centre.y, place.centre.z).multiplyScalar(layout.scale).applyQuaternion(q).add(at);
     expect(eyeAt.distanceTo(want)).toBeLessThan(1e-4);
     f.dispose();
-    rag.dispose();
-    world.free();
   });
 
-  it('wobbles the pupils when the piece they sit on moves', () => {
-    const world = createWorld(20);
-    const rag = new Ragdoll(world, layout, { bounce: 0.35 });
+  it('keeps each piece at rest: its capsule’s centre, turned along it (pieceRestMatrices, and on the fighter object)', () => {
     const f = createFighterObject(body, fists, layout);
-    rag.pieces[f.boneSegment[f.eyes[0].bone]].body.setLinvel({ x: 0, y: 6, z: 0 }, true); // the piece the eye rides on
-    driveBones(f, rag, 1 / 60);
+    const rest = pieceRestMatrices(layout);
+    layout.segments.forEach((g, k) => {
+      const { p, q } = restPiece(g);
+      const want = new Matrix4().compose(p, q, new Vector3(1, 1, 1));
+      close(rest[k], want);
+      close(f.pieceRest[k], want);
+      expect(origin(rest[k]).distanceTo(new Vector3(g.a.x + g.b.x, g.a.y + g.b.y, g.a.z + g.b.z).multiplyScalar(0.5))).toBeLessThan(1e-9);
+    });
+    f.dispose();
+  });
+
+  it('driveBonesFrom wobbles the pupils when the piece they sit on moves between frames', () => {
+    const f = createFighterObject(body, fists, layout);
+    const now = f.pieceRest.map((m) => m.clone());
+    driveBonesFrom(f, now, 1 / 60);
+    expect(f.eyes[0].offset.length()).toBe(0); // the first frame has nothing to compare with
+    const k = f.boneSegment[f.eyes[0].bone];
+    now[k].premultiply(new Matrix4().makeTranslation(0, 0.1, 0)); // 6 m/s up
+    driveBonesFrom(f, now, 1 / 60);
     expect(f.eyes[0].offset.length()).toBeGreaterThan(0);
     f.dispose();
-    rag.dispose();
-    world.free();
   });
 
   it('carries a jaw the layout never saw on its head piece (a layout made from the plain skeleton)', () => {
@@ -191,23 +197,21 @@ describe('createFighterObject', () => {
     const wb = builtBody(wings, [2]);
     expect(wb.skeleton.jaw).toBeGreaterThanOrEqual(0);
     const sk = buildSkeleton(wings);
-    const L = ragdollLayout(sk, planFor(wings, sk)); // one bone short: no jaw
+    const L = bodyLayout(sk, planFor(wings, sk)); // one bone short: no jaw
     expect(L.boneSegment.length).toBe(wb.skeleton.bones.length - 1);
-    const world = createWorld(20);
-    const rag = new Ragdoll(world, L, { bounce: 0.35 });
     const f = createFighterObject(wb, wings, L);
     const jaw = wb.skeleton.jaw, head = wb.skeleton.bones[jaw].parent;
     expect(f.boneSegment[jaw]).toBe(f.boneSegment[head]);
     // the head piece turns: the jaw turns with it, staying where it sat against the head
-    const hp = rag.pieces[f.boneSegment[head]];
-    const turn = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), 0.8);
-    const r = new Quaternion().multiplyQuaternions(turn, hp.restQ);
-    hp.body.setRotation({ x: r.x, y: r.y, z: r.z, w: r.w }, true);
-    driveBones(f, rag);
+    const now = f.pieceRest.map((m) => m.clone()), k = f.boneSegment[head];
+    const centre = origin(now[k]);
+    now[k].premultiply(new Matrix4().makeTranslation(-centre.x, -centre.y, -centre.z))
+      .premultiply(new Matrix4().makeRotationAxis(new Vector3(1, 0, 0), 0.8))
+      .premultiply(new Matrix4().makeTranslation(centre.x, centre.y, centre.z));
+    driveBonesFrom(f, now);
     const rel = (m: Matrix4[]) => m[head].clone().invert().multiply(m[jaw]);
     close(rel(f.bones.map((b) => b.matrixWorld)), rel(f.restBones), 1e-5);
+    expect(origin(f.bones[jaw].matrixWorld).distanceTo(origin(f.restBones[jaw]))).toBeGreaterThan(1e-3); // it did move
     f.dispose();
-    rag.dispose();
-    world.free();
   }, 20_000);
 });

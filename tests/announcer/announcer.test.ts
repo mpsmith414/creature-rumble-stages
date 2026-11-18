@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Announcer, introText, RecentLines } from '../../src/announcer/announcer';
-import { LINES } from '../../src/announcer/lines';
+import { Announcer, HOLD_MAX_MS, introText, RecentLines } from '../../src/announcer/announcer';
+import { fillSlots, LINES } from '../../src/announcer/lines';
 
 /** A voice that has decoded the texts `ready` accepts, and logs what it is asked to do. */
 function fakeVoice(o: { ready?: (t: string) => boolean; seconds?: number } = {}) {
@@ -76,7 +76,7 @@ describe('Announcer', () => {
   it('a hit never talks over a priority line that is still showing, and a priority line interrupts anything', () => {
     const s = setup();
     s.at(0);
-    s.a.say('ringOut', { other: 'Pip' });
+    s.a.say('knockOut', { other: 'Pip' });
     s.at(2);
     s.a.say('hit', { name: 'A', other: 'B' });
     expect(s.shown).toHaveLength(1);
@@ -93,7 +93,7 @@ describe('Announcer', () => {
     s.at(0);
     expect(s.a.say('hit', { name: 'A', other: 'B' }).spoken).toBe(true);
     s.at(1);
-    const r = s.a.say('ringOut', { other: 'Pip' });
+    const r = s.a.say('knockOut', { other: 'Pip' });
     expect(s.v.voice.stop).toHaveBeenCalled();
     expect(r.spoken).toBe(true);
     expect(s.calls.filter((c) => c.startsWith('duck'))).toEqual(['duck true', 'duck false', 'duck true']);
@@ -153,7 +153,7 @@ describe('Announcer', () => {
     s.runLater();
     s.at(3);
     s.a.say('hit', { name: 'A', other: 'B' });
-    s.a.say('holdsRing', { name: 'A' });
+    s.a.say('holdsStage', { name: 'A' });
     expect(s.shown).toHaveLength(1);
     s.v.finish();
     expect(s.calls).toContain('sting');
@@ -220,13 +220,13 @@ describe('Announcer', () => {
       }
     });
 
-    it('a group intro holds it off too, and so does a ring-out line still up, until it is over', () => {
+    it('a group intro holds it off too, and so does a knockout line still up, until it is over', () => {
       const s = setup();
       s.at(0);
       s.a.say('groupIntro', { names: 'A and B' });
       s.at(1);
       expect(s.a.say('special', slots).text).toBe('');
-      s.a.say('ringOut', { other: 'A' });
+      s.a.say('knockOut', { other: 'A' });
       s.at(1.5);
       expect(s.a.say('special', slots).text).toBe(''); // never cuts "A IS OUT!" off
       s.at(30);
@@ -252,18 +252,18 @@ describe('Announcer', () => {
     });
   });
 
-  describe('a ring event', () => {
-    it('never interrupts an intro, but cuts a ring-out line off (its title is not lost) and chatter cannot talk over it', () => {
+  describe('a level mischief', () => {
+    it('never interrupts an intro, but cuts a knockout line off (its title is not lost) and chatter cannot talk over it', () => {
       const s = setup();
       s.at(0);
       s.a.say('intro', { name: 'Sir Bounces', maker: 'Pickle' });
       s.runLater();
       s.at(2);
-      expect(s.a.say('ringEvent', { event: 'Moon Jump' }, { title: 'MOON JUMP!' }).text).toBe('');
+      expect(s.a.say('levelEvent', { event: 'Moon Jump' }, { title: 'MOON JUMP!' }).text).toBe('');
       s.at(20);
-      s.a.say('ringOut', { other: 'A' });
+      s.a.say('knockOut', { other: 'A' });
       s.at(20.5);
-      const r = s.a.say('ringEvent', { event: 'Moon Jump' }, { title: 'MOON JUMP!' });
+      const r = s.a.say('levelEvent', { event: 'Moon Jump' }, { title: 'MOON JUMP!' });
       expect(r.text).toContain('MOON JUMP');
       expect(s.shown.at(-1)!.title).toBe('MOON JUMP!');
       s.at(21);
@@ -319,5 +319,98 @@ describe('RecentLines', () => {
     const r = new RecentLines({ get: () => { throw new Error('x'); }, set: () => { throw new Error('y'); } });
     r.add('a');
     expect(r.has('a')).toBe(true);
+  });
+});
+
+describe('a warning that a creature is about to fly is never lost', () => {
+  /** The banner lines that are warnings (any about-to-fly line, whoever it names). */
+  const warnings = (s: ReturnType<typeof setup>) => s.shown.filter((b) => LINES.aboutToFly.some((l) => b.sub === fillSlots(l, { name: 'Pip' })));
+
+  it('one that comes while a knockout line is up waits, and is said when that line ends', () => {
+    const s = setup();
+    s.a.say('knockOut', { other: 'Bo' });
+    expect(s.a.say('aboutToFly', { name: 'Pip' }).text).toBe('');
+    expect(s.lastText()).not.toContain('PIP');
+    s.at(1);
+    s.runLater(); // too early: still up, it waits again
+    expect(s.lastText()).not.toContain('PIP');
+    s.at(10);
+    s.runLater();
+    expect(s.lastText()).toContain('PIP');
+    expect(warnings(s)).toHaveLength(1);
+  });
+
+  it('one that comes during an intro waits for it too', () => {
+    const s = setup();
+    s.a.say('intro', { name: 'Bo', maker: 'Sam' });
+    expect(s.a.say('aboutToFly', { name: 'Pip' }).text).toBe('');
+    s.at(5);
+    s.runLater(); // the intro is still up (9 s): it waits again
+    expect(s.shown.some((b) => b.sub.includes('PIP'))).toBe(false);
+    s.at(10);
+    s.runLater();
+    expect(s.shown.some((b) => b.sub.includes('PIP'))).toBe(true);
+  });
+
+  it('several waiting are said together, naming them all; one more during a warning waits for it', () => {
+    const s = setup();
+    s.a.say('knockOut', { other: 'Bo' });
+    s.a.say('aboutToFly', { name: 'Pip' });
+    s.a.say('aboutToFly', { name: 'Zed' });
+    s.at(10);
+    s.runLater();
+    expect(s.lastText()).toContain('PIP AND ZED');
+    const n = s.shown.length;
+    // a third while that warning is still up: held, not said over it
+    expect(s.a.say('aboutToFly', { name: 'Dot' }).text).toBe('');
+    expect(s.shown.length).toBe(n);
+    s.at(20);
+    s.runLater();
+    expect(s.lastText()).toContain('DOT');
+  });
+
+  it('a warning that waited too long is stale and dropped', () => {
+    const s = setup();
+    s.a.say('knockOut', { other: 'Bo' });
+    s.a.say('aboutToFly', { name: 'Pip' });
+    s.at(HOLD_MAX_MS / 1000 + 5);
+    s.runLater();
+    expect(s.shown.some((b) => b.sub.includes('PIP'))).toBe(false);
+  });
+
+  it('warn: one line naming everyone now, or held by id; a held one taken back (out, cooled, left) is never said', () => {
+    const s = setup();
+    expect(s.a.warn([{ id: 'a', name: 'Pip' }, { id: 'b', name: 'Zed' }]).text).toContain('PIP AND ZED');
+    const t = setup();
+    t.a.say('knockOut', { other: 'Bo' });
+    expect(t.a.warn([{ id: 'a', name: 'Pip' }, { id: 'b', name: 'Zed' }]).text).toBe('');
+    t.a.cancelHeld('a'); // Pip went out (or an Ice Pop cooled it) while the warning waited
+    t.at(10);
+    t.runLater();
+    expect(t.lastText()).toContain('ZED');
+    expect(t.shown.some((b) => b.sub.includes('PIP'))).toBe(false);
+    // every one taken back: nothing is said at all
+    const u = setup();
+    u.a.say('knockOut', { other: 'Bo' });
+    u.a.warn([{ id: 'a', name: 'Pip' }]);
+    const n = u.shown.length;
+    u.a.cancelHeld('a');
+    u.at(10);
+    u.runLater();
+    expect(u.shown.length).toBe(n);
+    // two creatures with the same name are told apart by id
+    const v = setup();
+    v.a.say('knockOut', { other: 'Bo' });
+    v.a.warn([{ id: 'a', name: 'Pip' }, { id: 'b', name: 'Pip' }]);
+    v.a.cancelHeld('a');
+    v.at(10);
+    v.runLater();
+    expect(v.lastText()).toContain('PIP');
+    expect(v.lastText()).not.toContain('PIP AND PIP');
+  });
+
+  it('with nothing up, a warning is said at once', () => {
+    const s = setup();
+    expect(s.a.say('aboutToFly', { name: 'Pip' }).text).toContain('PIP');
   });
 });

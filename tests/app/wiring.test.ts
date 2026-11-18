@@ -1,17 +1,19 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, test, vi } from 'vitest';
+import { createBring } from '../../src/bring/bring';
 import type { BodyData } from '../../src/builder/build';
 import type { Studio } from '../../src/bring/studio';
 import type { Made } from '../../src/bring/workshop';
-import type { Maker, PhoneCommand, RingPhase } from '../../src/bring/protocol';
+import type { Maker, PhoneCommand, MatchPhase } from '../../src/bring/protocol';
 import type { RosterItem } from '../../src/roster/roster';
 import {
-  capsuleUi, gatedVoice, handleCommand, keepMade, localStore, memoryRoster, OOPS_MS, RingBroadcast, sendBack, type CommandDeps,
+  capsuleUi, gatedVoice, handleCommand, keepMade, localStore, memoryRoster, OOPS_MS, MatchBroadcast, sendBack, type CommandDeps, JOIN_CARD_DEFAULT, JOIN_CARD_KEY, joinKey, startHint,
 } from '../../src/app/wiring';
 import { loadFixture } from '../fixtures/fighters';
 
 const flush = () => new Promise((go) => setTimeout(go, 0));
 
-function ring(phase: RingPhase, fighting: number) {
+function matchState(phase: MatchPhase, fighting: number) {
   const s = { phase, fighting };
   const d: CommandDeps & { s: typeof s } = {
     s, phase: () => s.phase, fighting: () => s.fighting,
@@ -26,16 +28,16 @@ describe('phone commands are gated by the phase', () => {
   const crown: PhoneCommand = { kind: 'crown' }, again: PhoneCommand = { kind: 'again' };
 
   test('crown only while open with someone fighting, and only once', () => {
-    expect(handleCommand(crown, ring('open', 0))).toBe('ignored');
-    const d = ring('open', 2);
+    expect(handleCommand(crown, matchState('open', 0))).toBe('ignored');
+    const d = matchState('open', 2);
     expect(handleCommand(crown, d)).toBe('crown');
     expect(handleCommand(crown, d)).toBe('ignored'); // a second phone, a double tap
     expect(d.crown).toHaveBeenCalledTimes(1);
   });
 
   test('again only after a crowning, and only once', () => {
-    expect(handleCommand(again, ring('open', 3))).toBe('ignored');
-    const d = ring('crowned', 1);
+    expect(handleCommand(again, matchState('open', 3))).toBe('ignored');
+    const d = matchState('crowned', 1);
     expect(handleCommand(again, d)).toBe('again');
     expect(handleCommand(again, d)).toBe('ignored');
     expect(d.again).toHaveBeenCalledTimes(1);
@@ -43,19 +45,19 @@ describe('phone commands are gated by the phase', () => {
 
   test('send back goes to sendBack with its id in either phase', () => {
     for (const p of ['open', 'crowned'] as const) {
-      const d = ring(p, 0);
+      const d = matchState(p, 0);
       expect(handleCommand({ kind: 'sendBack', id: 'r1' }, d)).toBe('sendBack');
       expect(d.sendBack).toHaveBeenCalledWith('r1');
     }
   });
 });
 
-describe('the ring broadcast', () => {
+describe('the match broadcast', () => {
   function rig() {
-    const state = { phase: 'open' as RingPhase, fighting: 0 };
+    const state = { phase: 'open' as MatchPhase, fighting: 0 };
     const send = vi.fn(async () => true);
     const roster = vi.fn(async () => [{ id: 'r1', name: 'Pip', maker: 'Pickle', crowns: 0, thumb: null }]);
-    return { state, send, roster, b: new RingBroadcast({ state: () => ({ ...state }), roster, send }) };
+    return { state, send, roster, b: new MatchBroadcast({ state: () => ({ ...state }), roster, send }) };
   }
 
   test('pushes on the first look, then only when the phase or the fighting count changes', async () => {
@@ -78,7 +80,7 @@ describe('the ring broadcast', () => {
     expect(send).toHaveBeenLastCalledWith('crowned', 1, expect.anything());
   });
 
-  test('the roster is read once and reused for ring changes; a roster change or a failed read reads it again', async () => {
+  test('the roster is read once and reused for match changes; a roster change or a failed read reads it again', async () => {
     const { state, roster, b } = rig();
     b.watch();
     await flush();
@@ -99,7 +101,7 @@ describe('the ring broadcast', () => {
     warn.mockRestore();
   });
 
-  test('a roster change or a fresh relay pushes even when the ring is the same; pushes never overlap', async () => {
+  test('a roster change or a fresh relay pushes even when the match is the same; pushes never overlap', async () => {
     const { send, roster, b } = rig();
     b.watch();
     void b.push();
@@ -145,7 +147,7 @@ describe('send back in', () => {
     }
   });
 
-  test('one already in the ring or on deck: nothing is read, loaded or built', async () => {
+  test('one already on the stage or on deck: nothing is read, loaded or built', async () => {
     const arrive = vi.fn(), build = vi.fn(), cached = vi.fn(), get = vi.fn(async () => item);
     expect(await sendBack('r1', { known: () => true, get, cached, build, arrive })).toBe(false);
     for (const f of [get, cached, build, arrive]) expect(f).not.toHaveBeenCalled();
@@ -270,5 +272,51 @@ describe('stores and stand-ins never throw', () => {
     await r.fought([a.id, b.id, 'nope']);
     expect(await r.get(a.id)).toMatchObject({ crowns: 1, bouts: 1 });
     expect((await r.summaries())[1]).toEqual({ id: a.id, name: 'Blobby', maker: 'Sam', crowns: 1, thumb: null });
+  });
+});
+
+describe('the join card on the TV (ruling R39: smaller, easy to hide, remembered)', () => {
+  test('J toggles it; held, with a modifier, another key, or while the menu or workshop has the screen, nothing', () => {
+    const toggle = vi.fn();
+    expect(joinKey({ key: 'j' }, false, toggle)).toBe(true);
+    expect(joinKey({ key: 'J' }, false, toggle)).toBe(true);
+    expect(toggle).toHaveBeenCalledTimes(2);
+    expect(joinKey({ key: 'j', repeat: true }, false, toggle)).toBe(false);
+    expect(joinKey({ key: 'j', ctrlKey: true }, false, toggle)).toBe(false);
+    expect(joinKey({ key: 'k' }, false, toggle)).toBe(false);
+    expect(joinKey({ key: 'j' }, true, toggle)).toBe(false);
+    expect(toggle).toHaveBeenCalledTimes(2);
+  });
+
+  test('the start screen says how to join, or how to show the card when it is hidden', () => {
+    expect(startHint(true)).toMatch(/scan/i);
+    expect(startHint(false)).toMatch(/press j/i);
+  });
+
+  test('the card is about 13% of the width, the QR code most of it', () => {
+    const css = readFileSync('src/bring/bring.css', 'utf8');
+    const card = /\.join-card \{([^}]*)\}/.exec(css)![1];
+    const width = Number(/(?:^|[\s;])width:\s*([\d.]+)vw/.exec(card)![1]);
+    expect(width).toBeGreaterThanOrEqual(12);
+    expect(width).toBeLessThanOrEqual(14);
+    const qr = Number(/\.join-qr \{[^}]*width:\s*([\d.]+)cqw/.exec(css)![1]);
+    expect(qr).toBeGreaterThanOrEqual(80);
+  });
+
+  test('its mode is kept across nights: the TV starts it as remembered and hears every toggle', () => {
+    const kept: string[] = [];
+    const client = () => ({
+      start: async () => {}, stop: () => {}, reclaim: async () => {}, send: async () => true, sendMatch: async () => true, onCommand: () => () => {},
+    });
+    const card = { show: vi.fn(), line: vi.fn(), hide: vi.fn(), visible: false };
+    const off = createBring(card, client, { mode: 'off', onMode: (m) => void kept.push(m) });
+    expect(off.mode).toBe('off');
+    expect(off.cardShown).toBe(false);
+    off.toggle();
+    expect(kept).toEqual(['on']);
+    off.toggle();
+    expect(kept).toEqual(['on', 'off']);
+    expect(createBring(card, client, { mode: JOIN_CARD_DEFAULT }).cardShown).toBe(true);
+    expect(JOIN_CARD_KEY).toBe('rumble.joinCard');
   });
 });

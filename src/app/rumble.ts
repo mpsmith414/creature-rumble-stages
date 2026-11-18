@@ -1,100 +1,93 @@
-import { Vector3 } from 'three/webgpu';
-import { createArena, type Arena } from '../arena/arena';
+import { Color, Vector3 } from 'three/webgpu';
 import { connectWorkshop, sendEnd, TRY_AGAIN, type Made } from '../bring/workshop';
 import type { BodyData } from '../builder/build';
 import { bodyCacheKey, loadBody } from '../builder/cache';
-import { TUNE } from '../fight/tune';
+import { LEVEL_ORDER, LEVELS } from '../levels';
 import { Match } from '../match/match';
-import type { FighterObject } from '../render/fighter-object';
 import { createFighterObject } from '../render/fighter-object';
 import { compileTogether } from '../render/compile';
-import { planFor } from '../fight/moves';
-import { ragdollLayout } from '../physics/layout';
+import { renderView } from '../render/snapshot';
+import type { View } from '../designer/types';
 import type { Recipe } from '../recipe/schema';
 import warmUpFighter from '../fixtures/fighters/fists.json';
-import { driveBones } from '../render/drive';
-import { setGlow } from '../render/toon';
 import type { RosterItem } from '../roster/roster';
 import { h } from '../shared/dom';
-import { Input } from '../shared/input';
+import { Input, type Button } from '../shared/input';
 import { remember, stored } from '../shared/settings';
-import { CameraDirector, facingYaw } from '../show/camera';
-import type { ShotCue } from '../show/shot-picker';
-import { propSpheres, type Sphere } from '../show/shots';
-import { Entrance } from '../show/entrance';
-import { Finale } from '../show/finale';
-import { TA_DA } from '../show/pops';
-import { SlowMo } from '../show/slowmo';
-import { Shockwaves } from '../show/shockwave';
-import { DizzyStars } from '../show/stars';
-import { Trails } from '../show/trails';
-import { RingLooks } from '../show/ring-looks';
+import { DROP_IN_S, GROUP_DROP_IN_S } from '../show/drop-in';
+import { addStageLights } from '../show/stage-lights';
+import { bodyStats } from '../stage/body';
+import type { LevelId } from '../stage/level';
 import type { Core } from './core';
-import { RingLoop } from './loop';
-import { RingFeatures } from '../arena/features';
 import { menuControl } from './menu-control';
-import { openMenu, type FighterRow, type MenuState, type RumbleMenu } from './menu';
+import { openMenu, openPicker, pickerChoices, withPictures, type FighterRow, type MenuState, type PadPicker, type PickChoice, type RumbleMenu } from './menu';
+import { padColour, PadSeats, routePress, type SeatEvent } from './pad-seats';
+import { CreaturePictures, DrawAhead } from './pictures';
 import { RumbleShow, type Card } from './show';
-import { handleCommand, keepMade, RingBroadcast, sendBack } from './wiring';
-
+import { STAGE_FOV, StageShow } from './stage-show';
+import { handleCommand, joinKey, keepMade, MatchBroadcast, sendBack, startHint } from './wiring';
 
 /** What the Rumble hands back (the dev panel and its shots drive it through this). */
 export type RumbleApi = {
-  show: RumbleShow<FighterObject>; match: Match; loop: RingLoop; arena: Arena; entrance: Entrance; world: Core['world']; looks: RingLooks;
-  /** The camera's director (the dev panel steps through its shots and shows which is on). */
-  director: CameraDirector;
-  /** Learn a creature and send it in (an entrance follows). */
+  show: RumbleShow; match: Match;
+  /** The stage's picture (camera, scenery, looks). */
+  view: StageShow;
+  /** The fight on the level now (each new level or Again! makes a new one: read these again). */
+  readonly loop: RumbleShow['loop'];
+  readonly sim: RumbleShow['sim'];
+  /** The level now, and the TV menu's pick. */
+  level(): LevelId;
+  setLevel(id: LevelId): void;
+  /** Learn a creature and send it in (a drop-in follows). */
   enter(card: Card): void;
-  /** Learn creatures and stand them in the ring at once (no entrances). */
+  /** Learn creatures and stand them on the stage at once (no drop-ins). */
   quickFill(cards: Card[]): void;
   crown(): boolean;
   again(): boolean;
   reset(): void;
   /** Is the TV menu open (the dev keys keep out of its way)? */
   menuOpen(): boolean;
+  /** The controllers and the keyboard (dev checks stand in for pads through `padStubs`, or `keyPad`). */
+  input: Input;
+  /** Who steers which creature with a controller. */
+  seats: PadSeats;
   /** Runs after every frame is drawn, in the same task (a page shot reads the canvas there). Returns the way to stop. */
   onFrame(fn: () => void): () => void;
 };
 
 /** Seconds of show clock; the frame is capped so a stalled tab does not leap. */
 const MAX_FRAME = 0.05;
-/** A frame whose ring loop failed has no moments for the camera. */
-const NO_CUES: readonly ShotCue[] = [];
 /** A failing frame is logged at most this often (s). */
 const ERROR_LOG_S = 5;
 /** Volume as the menu sets it (0 … 1) to the master gain (the mixer's own level). */
 const MASTER = 0.9;
+/** The stage camera's near and far planes (m). */
+const NEAR = 0.5, FAR = 400;
+/** The sky behind the scenery. */
+const SKY = '#62b6f0';
+/** The start screen's keys, and (a controller plugged in) how to play with it. */
+const KEYS_HINT = 'Enter: menu · J: join code', PAD_HINT = ' · 🎮 A or Start: play · Select: menu';
+/** A picker's picture of a creature with no roster picture: seen as on the phone's cards, this many pixels square. */
+const PICTURE_VIEW: View = { angle: 'threeQuarter', facing: 'right' }, PICTURE_PX = 160;
+/** The "coming soon" capsule sits by the top left of the view (shares of its width and height from the centre). */
+const CAPSULE_AT = { x: -0.32, y: 0.3 };
 
 /**
- * The Rumble on the TV (spec §2): the arena, the match, the fight loop, entrances, the finale and the TV menu, on the
- * mode-neutral core. Phones send fighters in (release → roster → ring), crown champions and call Again!; the menu does
- * the same from the remote. The start screen ("ADD A CREATURE!" and the join card) shows while the ring is empty.
+ * The Rumble on the TV (spec §2; stages design §9, §12): the level, the match, the fight on the stage, drop-ins, the
+ * crowning and the TV menu, on the mode-neutral core. Phones send fighters in (release → roster → stage), crown
+ * champions and call Again!; the menu does the same from the remote and picks the level. The start screen ("ADD A
+ * CREATURE!" and the join card) shows while nobody is on the stage.
  */
 export async function startRumble(core: Core): Promise<RumbleApi> {
-  const { renderer, scene, camera, world, sfx, crowd, announcer, roster, bring, workshop, banner, pops, ui, capsule } = core;
-  const R = TUNE.ringRadius;
-  const arena = createArena(scene, world, TUNE); // adds the ring's colliders too
-  const match = new Match();
-  const slow = new SlowMo();
-  const stars = new DizzyStars(scene, TUNE);
-  const trails = new Trails(scene), shockwaves = new Shockwaves(scene);
-  const finale = new Finale(scene, { ringRadius: R });
-  // the shot director: it keeps the camera out of the beach ball and the risen pinball posts, and knows an event is on
-  const props: Sphere[] = [];
-  const director = new CameraDirector({ ringRadius: R, bumper: TUNE.bumper, fov: camera.fov }, {
-    props: () => propSpheres(features, props), event: () => features.event !== null,
-  });
-  director.cut();
-  // walkers land clear of everyone standing in the ring (the fight is frozen in place while they enter)
-  const standing = () => loop.all().filter((f) => f.state === 'fighting' && f.ragdoll.pieces.length).map((f) => f.ragdoll.pos());
-  const entrance = new Entrance(arena, TUNE, (cue) => {
-    if (cue.type === 'taDa') pops.pop(cue.at, camera, TA_DA, 1.4);
-  }, { standing });
-  // the wild ring's spring pads and ring events (their looks come with the arena)
-  const features = new RingFeatures(world, TUNE, { rng: Math.random, floor: arena.floor });
-  const loop = new RingLoop({ world, match, slowmo: slow, tune: TUNE, entrance, features });
-  // ... and their looks, with the rim lights, spotlights, event looks, the crowd and the confetti cannons
-  const looks = new RingLooks(scene, { ringRadius: R, bumper: () => TUNE.bumper, features, setNight: (k) => arena.setNight(k), entry: arena.entry.angle });
+  const { renderer, scene, camera, sfx, crowd, announcer, roster, bring, workshop, banner, pops, ui, capsule } = core;
+  camera.fov = STAGE_FOV;
+  camera.near = NEAR;
+  camera.far = FAR;
+  camera.updateProjectionMatrix();
+  scene.background = new Color(SKY);
+  addStageLights(scene);
+  const match = new Match({ entrance: DROP_IN_S, group: GROUP_DROP_IN_S });
+  const view = new StageShow({ scene, camera, ui, level: LEVELS[LEVEL_ORDER[0] as keyof typeof LEVELS], pops, renderer });
   // a crowning changes the roster (one more crown): the phones hear it once it is saved
   const showRoster = {
     fought: (ids: string[]) => roster.fought(ids),
@@ -103,43 +96,27 @@ export async function startRumble(core: Core): Promise<RumbleApi> {
       void broadcast.push();
     },
   };
-  const show = new RumbleShow<FighterObject>({
-    world, tune: TUNE, rng: Math.random, match, loop, slow, camera, entrance, finale, stars, pops, banner, announcer, sfx, crowd, roster: showRoster,
-    director, trails, shockwaves, looks,
-    objects: {
-      make(c, layout) {
-        const o = createFighterObject(c.body, c.recipe, layout);
-        scene.add(o.root);
-        return o;
-      },
-      drive: (o, f, dt) => driveBones(o, f.ragdoll, dt),
-      glow: (o, level) => setGlow(o.mesh, level),
-      dispose(o) {
-        scene.remove(o.root);
-        o.dispose();
-      },
-    },
-  });
+  const show = new RumbleShow({ view, rng: Math.random, match, announcer, sfx, crowd, roster: showRoster, banner });
 
-  // ---------- the phones: the ring on every phone, their commands, their creatures ----------
-  const broadcast = new RingBroadcast({
+  // ---------- the phones: the fight on every phone, their commands, their creatures ----------
+  const broadcast = new MatchBroadcast({
     state: () => ({ phase: match.phase, fighting: match.fighting.length }),
     roster: () => roster.summaries(),
-    send: (phase, fighting, entries) => bring.sendRing(phase, fighting, entries),
+    send: (phase, fighting, entries) => bring.sendMatch(phase, fighting, entries),
   });
   bring.onStatus((s, fresh) => {
-    if (s === 'hosting' && fresh) void broadcast.push(false); // a new relay: the same ring and roster, sent again
+    if (s === 'hosting' && fresh) void broadcast.push(false); // a new relay: the same fight and roster, sent again
   });
   const cardOf = (item: RosterItem, body: BodyData): Card => ({
     id: item.id, recipe: item.recipe, body, maker: item.maker.name || null, name: item.cards.name || item.recipe.name,
   });
   const sendBackIn = (id: string) => sendBack(id, {
-    known: (i) => show.known(i), // already in the ring or on deck: no body is loaded or built
+    known: (i) => show.known(i), // already on the stage or on deck: no body is loaded or built
     get: (i) => roster.get(i),
     cached: (r) => loadBody(bodyCacheKey(r)),
     build: (r) => core.build(r),
     arrive(item, body) {
-      if (show.known(item.id)) return; // already in the ring or on deck
+      if (show.known(item.id)) return; // already on the stage or on deck
       show.register(cardOf(item, body));
       show.arrive([item.id]);
     },
@@ -154,7 +131,7 @@ export async function startRumble(core: Core): Promise<RumbleApi> {
   const tell = (token: string, o: Outcome) =>
     sendEnd((t, m) => bring.send(t, m), token, o === 'failed' ? { type: 'failed', message: TRY_AGAIN, retry: true } : { type: o });
   connectWorkshop(bring, workshop, {
-    /** "Send to the ring!": kept in the roster, its intro fetched now, then into the ring (an entrance, or on deck). */
+    /** "Send to the fight!": kept in the roster, its intro fetched now, then onto the stage (a drop-in, or on deck). */
     async onRelease(made: Made) {
       let outcome: Outcome = 'failed';
       try {
@@ -194,15 +171,21 @@ export async function startRumble(core: Core): Promise<RumbleApi> {
     core.mixer.master.gain.value = vol.muted ? 0 : MASTER * Math.min(1, Math.max(0, vol.volume));
   };
   applyVolume();
-  const menuState = (): MenuState => ({ phase: match.phase, fighting: match.fighting.length, joinShown: bring.cardShown, ...vol });
+  const menuState = (): MenuState => ({
+    phase: match.phase, fighting: match.fighting.length, joinShown: bring.cardShown, level: show.levelId, ...vol,
+  });
   const fighters = async (): Promise<FighterRow[]> =>
-    (await roster.summaries()).map((s) => ({ ...s, inRing: show.known(s.id) }));
+    (await roster.summaries()).map((s) => ({ ...s, inFight: show.known(s.id) }));
   const control = menuControl({
     ui,
     waiting: () => false,
     open: (root, close) => openMenu(root, menuState(), {
       crown: () => void show.crown(),
       again: () => void show.again(),
+      level: (id) => {
+        show.setLevel(id);
+        refreshMenu();
+      },
       fighters,
       sendBack: (id) => void sendBackIn(id).catch((e) => console.warn('send back failed', e)),
       join: () => {
@@ -227,18 +210,95 @@ export async function startRumble(core: Core): Promise<RumbleApi> {
     }, close),
   });
   let menuKey = '';
+  const keyOf = (s: MenuState) => `${s.phase}|${s.fighting > 0}|${s.level}`;
   const refreshMenu = () => {
     const m = control.open as RumbleMenu | null;
     const s = menuState();
-    menuKey = `${s.phase}|${s.fighting > 0}`;
+    menuKey = keyOf(s);
     m?.update(s);
   };
-  const input = new Input();
-  input.onPress = (b, repeat) => {
-    if (control.press(b, repeat)) return;
-    if (b === 'a' && !repeat) control.show();
+  // ---------- controller play (stages design §10) ----------
+  // On a controller nobody is playing with: A or Start opens its picker (choose a creature to steer), Select opens the
+  // TV menu (while the menu is up, the free controllers drive it and Start or Select shuts it); the remote and Enter open
+  // the menu too. A free controller's A never reaches the menu, so a child pressing A to jump can never crown the
+  // champion or call Again!. A controller playing: every button is its creature's; Start + Select gives the creature
+  // back to the AI. Its creature going out frees it (A, after a second, or Start picks again: `routePress`, PadSeats).
+  const seats = new PadSeats((id) => show.known(id));
+  const pickers = new Map<number, PadPicker>();
+  const pickerRoot = h('div', { class: 'rm-pickers' });
+  ui.append(pickerRoot);
+  /** The creatures in play (fighting, dropping in, on deck), with the names they are called. */
+  const inPlay = () => [...match.fighting, ...match.entering, ...match.onDeck].map((id) => ({ id, name: show.card(id)?.name ?? id }));
+  const shut = (pad: number) => {
+    pickers.get(pad)?.close();
+    pickers.delete(pad);
   };
+  // every card shows its own creature: the roster's picture, else one of its body (drawn once with the TV's renderer,
+  // which `renderView` puts back on the stage before the frame is shown)
+  const pictures = new CreaturePictures(async (id) => {
+    let body = show.card(id)?.body, recipe = show.card(id)?.recipe;
+    if (!body) {
+      const item = await roster.get(id);
+      recipe = item?.recipe;
+      body = item ? (await loadBody(bodyCacheKey(item.recipe))) ?? undefined : undefined;
+    }
+    if (!body || !recipe) return null;
+    const img = await renderView({ renderer, scene, camera }, body, recipe, PICTURE_VIEW, PICTURE_PX);
+    return `data:${img.mediaType};base64,${img.base64}`;
+  });
+  /** With a controller plugged in: a creature fighting with no roster picture gets one drawn, so a picker opens at once. */
+  const ahead = new DrawAhead(pictures, () => roster.summaries());
+  /** Pad `pad`'s arrow over creature `id` (dimmed and sleepy while the pad rests). */
+  const markFor = (pad: number, id: string, resting = false) => view.mark(id, padColour(pad), String(pad + 1), resting);
+  /** Creature `id` back to the AI, its arrow gone. */
+  const letGo = (id: string) => {
+    show.steer(id, null);
+    view.mark(id, null);
+  };
+  /**
+   * Pad `pad` picked `c`: it steers it. One not in play now (from the roster, or one that went out while the picker was
+   * open, which is back in the roster) is sent in and held for the pad while it comes. Taken by another pad meanwhile:
+   * the picker stays open and reads its creatures again.
+   */
+  const choose = (pad: number, c: PickChoice) => {
+    const sending = !show.known(c.id);
+    if (!seats.claim(pad, c.id, sending)) return pickers.get(pad)?.refresh();
+    shut(pad);
+    show.steer(c.id, seats.source(pad));
+    markFor(pad, c.id);
+    if (sending) {
+      sendBackIn(c.id).catch((e) => {
+        console.warn('could not send the picked creature in', e);
+        if (seats.playing(pad) !== c.id) return;
+        seats.release(pad);
+        letGo(c.id);
+      });
+    }
+  };
+  const onSeat = (e: SeatEvent) => {
+    if (e.type === 'pick') {
+      shut(e.pad);
+      pickers.set(e.pad, openPicker(pickerRoot, {
+        colour: padColour(e.pad), player: e.pad + 1,
+        choices: async () => withPictures(pickerChoices(inPlay(), await roster.summaries(), (id) => seats.steering(id) !== undefined), (id) => pictures.get(id)),
+        pick: (c) => choose(e.pad, c),
+        back: () => {
+          seats.cancel(e.pad);
+          shut(e.pad);
+        },
+      }));
+    } else if (e.type === 'cancel') shut(e.pad);
+    else if (e.type === 'rest' || e.type === 'wake') markFor(e.pad, e.id, e.type === 'rest'); // the AI drives while it rests
+    else letGo(e.id);
+  };
+
+  const input = new Input();
+  const routes = { seats, menu: control, picker: (pad: number, b: Button, repeat: boolean) => pickers.get(pad)?.press(b, repeat) };
+  input.onPress = (b, repeat = false, pad) => routePress(b, repeat, pad, routes);
   window.addEventListener('keydown', (e) => {
+    if (input.keyPad) return; // dev: the keyboard is a controller now
+    // J shows or hides the join card (remembered, as the menu's "Show join code")
+    if (joinKey(e, !!control.open || workshop.busy, () => bring.toggle())) return refreshMenu();
     if (e.repeat) return;
     if (e.key === 'ContextMenu') { // the remote's Menu key
       e.preventDefault();
@@ -252,61 +312,61 @@ export async function startRumble(core: Core): Promise<RumbleApi> {
 
   // ---------- the start screen: "ADD A CREATURE!" (the join card shows beside it) ----------
   const soundHint = h('div', { class: 'rm-start-hint rm-start-sound' }, '🔊 Press any button for sound');
+  // how to join: scan the card, or (the card hidden) how to show it
+  const joinHint = h('div', { class: 'rm-start-hint' }, startHint(bring.cardShown));
+  // the keys, and once a controller is plugged in, how to play with it
+  const keysHint = h('div', { class: 'rm-start-keys' }, KEYS_HINT);
   const start = h('div', { class: 'rm-start', role: 'status' },
     h('div', { class: 'rm-start-title' }, 'ADD A CREATURE!'),
-    h('div', { class: 'rm-start-hint' }, 'Scan the code with a phone and draw a fighter'),
+    joinHint,
     soundHint,
-    h('div', { class: 'rm-start-keys' }, 'Enter: menu'));
+    keysHint);
   ui.append(start);
 
   // ---------- the frame ----------
   const hooks = new Set<() => void>();
-  const champAt = new Vector3(), ramp = arena.entry.dir.clone().multiplyScalar(R + 2.5).setY(0.6);
+  const capsuleAt = new Vector3();
   let clock = 0, last = performance.now(), loggedAt = -Infinity;
-  shockwaves.spawn(champAt, 1); // shown while the scene compiles, so the first special's shockwave does not hitch
-  looks.prepare(true); // and the ring's looks that wait for their moment
   await renderer.compileAsync(scene, camera);
-  looks.prepare(false);
-  shockwaves.clear();
   void warmFighterShaders(core);
   renderer.setAnimationLoop((now: number) => {
     const dt = Math.min(MAX_FRAME, Math.max(0, (now - last) / 1000));
     last = now;
     clock += dt;
-    input.poll(dt, !!control.open);
-    let cues: readonly ShotCue[] = NO_CUES;
+    const menuWasOpen = !!control.open;
+    input.poll(dt, (pad) => !!control.open || seats.picking(pad));
+    // (a press that shut the menu this frame, or opened it, never opens a picker as well)
+    for (const e of seats.update(input.pads(), dt, !menuWasOpen && !control.open && !workshop.busy)) onSeat(e);
+    ahead.tick(dt, match.fighting, input.pads().some(Boolean));
     try {
-      cues = show.frame(dt, clock).cues;
+      show.frame(dt, clock);
     } catch (e) {
       // the night goes on: the next frame tries again; the error is logged at most every 5 s
       if (clock - loggedAt >= ERROR_LOG_S) {
         loggedAt = clock;
-        console.error('the ring loop failed this frame', e);
+        console.error('the fight failed this frame', e);
       }
     }
     broadcast.watch();
-    const s = menuState();
-    if (control.open && `${s.phase}|${s.fighting > 0}` !== menuKey) refreshMenu();
-
-    arena.update(dt);
-    const champ = show.champion;
-    if (champ && champ.ragdoll.pieces.length) {
-      const p = champ.ragdoll.torso.body.translation();
-      director.champion(dt, champAt.set(p.x, 0, p.z), champ.layout.ringHeight, facingYaw(champ.ragdoll.torso));
-    } else if (entrance.active) {
-      director.entrance(dt, entrance.focus, arena.entry.dir, entrance.height, entrance.lift, entrance.side);
-      director.keep(cues); // a round's crane waits for the entrance to end
-    } else director.action(dt, loop.all(), cues);
-    director.apply(camera);
-    capsule.update(camera, ramp);
+    if (control.open && keyOf(menuState()) !== menuKey) refreshMenu();
+    const v = view.view;
+    capsule.update(camera, capsuleAt.set(v.cx + CAPSULE_AT.x * v.height * v.aspect, v.cy + CAPSULE_AT.y * v.height, 0));
     start.hidden = !(match.phase === 'open' && !match.fighting.length && !match.entering.length && !match.onDeck.length && !workshop.busy);
     soundHint.hidden = core.audio.live();
+    const hint = startHint(bring.cardShown);
+    if (!start.hidden && joinHint.textContent !== hint) joinHint.textContent = hint;
+    const keys = input.pads().some(Boolean) ? `${KEYS_HINT}${PAD_HINT}` : KEYS_HINT;
+    if (!start.hidden && keysHint.textContent !== keys) keysHint.textContent = keys;
     renderer.render(scene, camera);
     for (const fn of hooks) fn();
   });
 
   return {
-    show, match, loop, arena, entrance, world, looks, director,
+    show, match, view,
+    get loop() { return show.loop; },
+    get sim() { return show.sim; },
+    level: () => show.levelId,
+    setLevel: (id) => show.setLevel(id),
     enter(card) {
       show.register(card);
       show.arrive([card.id]);
@@ -319,6 +379,7 @@ export async function startRumble(core: Core): Promise<RumbleApi> {
     again: () => show.again(),
     reset: () => show.reset(),
     menuOpen: () => !!control.open,
+    input, seats,
     onFrame(fn) {
       hooks.add(fn);
       return () => void hooks.delete(fn);
@@ -328,15 +389,14 @@ export async function startRumble(core: Core): Promise<RumbleApi> {
 
 /**
  * Compiles a fighter's shaders once at start-up (one fixture's body, laid out, compiled detached but lit by the scene,
- * then thrown away), so the first creature to enter does not stall its entrance while the GPU compiles. In the
- * background: nothing waits for it, and a failure only means the first entrance may hitch.
+ * then thrown away), so the first creature to drop in does not stall while the GPU compiles. In the background: nothing
+ * waits for it, and a failure only means the first drop-in may hitch.
  */
 async function warmFighterShaders(core: Core): Promise<void> {
   try {
     const recipe = structuredClone(warmUpFighter) as Recipe;
     const body = await core.build(recipe);
-    const plan = planFor(recipe, body.skeleton);
-    const obj = createFighterObject(body, recipe, ragdollLayout(body.skeleton, plan));
+    const obj = createFighterObject(body, recipe, bodyStats(recipe, body.skeleton).layout);
     try {
       await compileTogether(core.renderer, obj.root, core.camera, core.scene);
     } finally {

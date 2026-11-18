@@ -1,23 +1,27 @@
 import {
   ENTRANCE_S,
   GROUP_ENTRANCE_S,
-  MAX_IN_RING,
+  MAX_ON_STAGE,
   SHARE_WINDOW_S,
   type MatchEvent,
 } from './rules';
 
 export type { MatchEvent } from './rules';
-export { ENTRANCE_S, GROUP_ENTRANCE_S, MAX_IN_RING, SHARE_WINDOW_S, isOut, isUnderFloor } from './rules';
+export { ENTRANCE_S, GROUP_ENTRANCE_S, MAX_ON_STAGE, SHARE_WINDOW_S } from './rules';
 
 const EPS = 1e-9;
 
 /**
  * Who is fighting, entering and waiting. Pure logic: no physics, no rendering.
- * One entrance runs at a time; arrivals within SHARE_WINDOW_S of its start join it.
+ * One entrance runs at a time; arrivals within SHARE_WINDOW_S of its start join it. A creature knocked out
+ * (`knockOut`) leaves the fight; the last one standing holds the stage (`holdsStage`).
  */
 export class Match {
-  private readonly maxInRing: number;
+  private readonly maxOnStage: number;
   private readonly freeze: boolean;
+  /** How long a lone entrance and a group one last (s). */
+  private readonly soloS: number;
+  private readonly groupS: number;
 
   private _fighting: string[] = [];
   private _entering: string[] = [];
@@ -32,9 +36,15 @@ export class Match {
   private pending: MatchEvent[] = [];
   private loneSpent = false;
 
-  constructor(o?: { maxInRing?: number; freeze?: boolean }) {
-    this.maxInRing = o?.maxInRing ?? MAX_IN_RING;
+  /**
+   * `entrance` and `group` are how long a lone entrance and a group one last (s): the old walk-ins by default, the
+   * stage's drop-ins (`DROP_IN_S`) for the Rumble on the stage.
+   */
+  constructor(o?: { maxOnStage?: number; freeze?: boolean; entrance?: number; group?: number }) {
+    this.maxOnStage = o?.maxOnStage ?? MAX_ON_STAGE;
     this.freeze = o?.freeze ?? true;
+    this.soloS = o?.entrance ?? ENTRANCE_S;
+    this.groupS = o?.group ?? GROUP_ENTRANCE_S;
   }
 
   get fighting(): readonly string[] {
@@ -60,7 +70,7 @@ export class Match {
   }
 
   private get room(): number {
-    return this.maxInRing - this._fighting.length - this._entering.length;
+    return this.maxOnStage - this._fighting.length - this._entering.length;
   }
 
   private canStart(): boolean {
@@ -85,7 +95,7 @@ export class Match {
         continue;
       }
       this._entering.push(id);
-      this.entranceLeft = GROUP_ENTRANCE_S;
+      this.entranceLeft = this.groupS;
       // one announcement per tick, naming everyone now entering
       this.pending = this.pending.filter((e) => e.type !== 'entranceStart');
       this.pending.push({ type: 'entranceStart', ids: [...this._entering], group: true });
@@ -98,7 +108,7 @@ export class Match {
     this.entranceRunning = true;
     this.entranceElapsed = 0;
     const group = this._entering.length > 1;
-    this.entranceLeft = group ? GROUP_ENTRANCE_S : ENTRANCE_S;
+    this.entranceLeft = group ? this.groupS : this.soloS;
     events.push({ type: 'entranceStart', ids: [...this._entering], group });
     return true;
   }
@@ -143,19 +153,19 @@ export class Match {
     }
   }
 
-  ringOut(ids: string[]): MatchEvent[] {
+  knockOut(ids: string[]): MatchEvent[] {
     const gone = this._fighting.filter((id) => ids.includes(id));
     if (gone.length === 0) return [];
     this._fighting = this._fighting.filter((id) => !gone.includes(id));
     if (this._fighting.length === 0) this.loneSpent = false;
-    const events: MatchEvent[] = [{ type: 'ringOut', ids: gone }];
+    const events: MatchEvent[] = [{ type: 'knockOut', ids: gone }];
     if (this._phase !== 'open') return events;
     const nobodyNext = this._entering.length === 0 && this._waiting.length === 0;
     if (this._fighting.length === 0 && gone.length >= 2) {
       events.push({ type: 'tie', ids: gone });
     } else if (this._fighting.length === 1 && nobodyNext) {
-      this.loneSpent = true; // holdsRing is the announcement for this spell
-      events.push({ type: 'holdsRing', id: this._fighting[0] });
+      this.loneSpent = true; // holdsStage is the announcement for this spell
+      events.push({ type: 'holdsStage', id: this._fighting[0] });
     }
     return events;
   }
@@ -181,10 +191,10 @@ export class Match {
 
   again(): MatchEvent[] {
     if (this._phase !== 'crowned') return [];
-    // the champion walks in last and always gets a place (spec §2.11): anyone past the ring's room waits on deck after it
+    // the champion walks in last and always gets a place (spec §2.11): anyone past the stage's room waits on deck after it
     const champ = this.champion;
     const others = [...new Set([...this.cast, ...this._waiting])].filter((id) => id !== champ);
-    const room = this.maxInRing - 1;
+    const room = this.maxOnStage - 1;
     const ids = champ === null ? others : [...others.slice(0, room), champ, ...others.slice(room)];
     this._phase = 'open';
     this.champion = null;

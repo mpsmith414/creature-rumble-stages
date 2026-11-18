@@ -1,6 +1,6 @@
-import { BADGES, type Maker, type RingEntry, type StepMsg } from '../bring/protocol';
+import { BADGES, type Maker, type RosterEntry, type StepMsg } from '../bring/protocol';
 import { h } from '../shared/dom';
-import { holdProgress, ringButtons, showsTabs, type PhoneState, type Tab } from './state';
+import { holdProgress, matchButtons, showsTabs, type PhoneState, type Tab } from './state';
 
 /** One screen per `Screen`, in the spec §2's words. Pure DOM builders: `main.ts` owns the state and the relay. */
 
@@ -17,10 +17,10 @@ export type View = {
   /** A tweak was sent and the TV is changing the creature. */
   tweaking?: boolean;
   /** The Fighters tab's own waits and line (kept apart, so a tweak's wait survives a look at the Fighters). */
-  ringUi?: RingUi;
+  matchUi?: MatchUi;
 };
-export type RingUi = {
-  /** A short friendly line under the ring buttons ("Whoa, one at a time!"). */
+export type MatchUi = {
+  /** A short friendly line under the match buttons ("Whoa, one at a time!"). */
   hint?: string;
   /** Crown or Again was sent: the button waits for the TV. */
   asked?: 'crown' | 'again';
@@ -45,8 +45,8 @@ export type Handlers = {
   tab(t: Tab): void;
   /** The Crown button was held for the whole 2 s. */
   crown(): void;
-  /** The ring's Again! (after a crowning). */
-  ringAgain(): void;
+  /** The match's Again! (after a crowning). */
+  matchAgain(): void;
   sendBack(id: string): void;
   /** A Crown hold started or stopped: the page holds back redraws meanwhile (a redraw would drop the hold). */
   holding(on: boolean): void;
@@ -179,7 +179,7 @@ function preview(v: View, on: Handlers): HTMLElement {
       big('No, go back', () => sheet.remove(), 'plain')));
   const later = h('div', { class: 'again' }, h('button', { class: 'small', onclick: () => el.append(sheet) }, 'Save for later'));
 
-  const release = big(v.busy ? 'Sending…' : 'Send to the ring!', on.release, 'release');
+  const release = big(v.busy ? 'Sending…' : 'Send to the fight!', on.release, 'release');
   release.disabled = !!(v.busy || v.tweaking);
   const el = page('preview', [
     title(cards?.name ?? 'Your creature'),
@@ -191,7 +191,7 @@ function preview(v: View, on: Handlers): HTMLElement {
   return el;
 }
 
-// ---------- the ring: the Make / Fighters tabs, Crown (held 2 s), Again!, and the roster to send back in ----------
+// ---------- the match: the Make / Fighters tabs, Crown (held 2 s), Again!, and the roster to send back in ----------
 
 /** The two tabs at the top of every screen once the phone has joined. A dot on Fighters says Again! is waiting there. */
 function tabs(v: View, on: Handlers): HTMLElement {
@@ -200,7 +200,7 @@ function tabs(v: View, on: Handlers): HTMLElement {
     class: `tab${t === at ? ' on' : ''}`, role: 'tab', 'aria-selected': String(t === at), onclick: () => { if (t !== at) on.tab(t); },
   }, label, dot ? h('span', { class: 'tab-dot', 'aria-label': 'Again! is ready' }) : null);
   return h('nav', { class: 'tabs', role: 'tablist' },
-    tab('flow', '✨ Make'), tab('fighters', '🥊 Fighters', at !== 'fighters' && ringButtons(v.state).again));
+    tab('flow', '✨ Make'), tab('fighters', '🥊 Fighters', at !== 'fighters' && matchButtons(v.state).again));
 }
 
 const RING_R = 26;
@@ -283,7 +283,7 @@ function crownButton(on: Handlers, waiting: boolean): HTMLElement {
 }
 
 /** One roster creature: its picture, name, maker and crowns, and Send back in! */
-function fighterRow(f: RingEntry, sent: boolean, on: Handlers): HTMLElement {
+function fighterRow(f: RosterEntry, sent: boolean, on: Handlers): HTMLElement {
   const pic = f.thumb
     ? h('img', { class: 'fighter-pic', src: f.thumb, alt: '' })
     : h('div', { class: 'fighter-pic none', 'aria-hidden': 'true' }, '🥊');
@@ -298,26 +298,26 @@ function fighterRow(f: RingEntry, sent: boolean, on: Handlers): HTMLElement {
     send);
 }
 
-/** The Fighters tab: Crown or Again! on top when the ring offers it, then everyone in the roster. */
+/** The Fighters tab: Crown or Again! on top when the match offers it, then everyone in the roster. */
 function fighters(v: View, on: Handlers): HTMLElement {
-  const { crown, again } = ringButtons(v.state);
-  const r = v.ringUi ?? {};
-  const ring = v.state.ring;
+  const { crown, again } = matchButtons(v.state);
+  const r = v.matchUi ?? {};
+  const match = v.state.match;
   const panel = crown || again
-    ? h('div', { class: 'ring-panel' },
+    ? h('div', { class: 'match-panel' },
       crown ? crownButton(on, r.asked === 'crown') : null,
       crown ? h('div', { class: 'hold-note' }, 'Hold for 2 seconds') : null,
-      again ? (() => { const b = big(r.asked === 'again' ? 'Here we go!' : 'Again!', on.ringAgain, 'ring-again'); b.disabled = r.asked === 'again'; return b; })() : null,
+      again ? (() => { const b = big(r.asked === 'again' ? 'Here we go!' : 'Again!', on.matchAgain, 'match-again'); b.disabled = r.asked === 'again'; return b; })() : null,
       r.hint ? h('p', { class: 'hint', role: 'status' }, r.hint) : null)
     : r.hint ? h('p', { class: 'hint', role: 'status' }, r.hint) : null;
-  const roster = ring?.roster ?? [];
+  const roster = match?.roster ?? [];
   const list = roster.length
     ? h('ul', { class: 'fighters' }, ...roster.map((f) => fighterRow(f, !!r.sentBack?.includes(f.id), on)))
     : h('div', { class: 'empty' }, hero('🥚'), h('p', { class: 'sub' }, 'No fighters yet. Make one!'));
   return page('fighters', [panel, title('Fighters'), list]);
 }
 
-/** What the phone keeps for tomorrow when the ring is resting. */
+/** What the phone keeps for tomorrow when the Rumble is resting. */
 const kept = (s: PhoneState) =>
   s.draft.hasImage ? 'Your picture is saved on this phone.' : s.draft.words.trim() ? 'Your words are saved on this phone.' : undefined;
 
@@ -339,7 +339,7 @@ function flow(v: View, on: Handlers): HTMLElement {
     case 'preview': return preview(v, on);
     case 'released': return message('released', '🎉', 'Here comes your fighter! Watch the TV!', ['Make another', on.again]);
     case 'kept': return message('kept', '💾', 'Saved for later!', ['Make another', on.again], 'Send it in from Fighters any time.');
-    case 'resting': return message('resting', '😴', 'The ring is resting. Come back tomorrow! 🌙', ['OK', on.again], kept(s));
+    case 'resting': return message('resting', '😴', 'The Rumble is resting. Come back tomorrow! 🌙', ['OK', on.again], kept(s));
     case 'failed': return message('failed', '🤔', s.message || "Hmm, let's try that one again!", ['Try again', on.again]);
     case 'noHost': return message('no-host', '📺', 'Open Rumble on the TV first', undefined, 'This screen wakes up by itself.');
     case 'rescan': return rescan(v, on);

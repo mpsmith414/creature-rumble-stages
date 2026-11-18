@@ -73,14 +73,12 @@ export default defineConfig({
     proxy: { '/api': { target: 'http://localhost:8797', changeOrigin: false, xfwd: true, configure: (proxy) => void proxy.on('error', (_e, _req, res) => endBrokenStream(res)) } },
   },
   worker: { format: 'es' },
-  // Rapier's compat build carries its WebAssembly inline (about 4 MB): it gets a chunk of its own, cached apart from the
-  // app's code, and the size warning sits above it
+  // the TV's main chunk carries three.js's WebGPU build (about 1 MB): the size warning sits above it
   build: {
-    target: 'es2023', chunkSizeWarningLimit: 4500,
+    target: 'es2023', chunkSizeWarningLimit: 1200,
     rollupOptions: {
       // voice.html (the voice audition page) is for `npm run dev` only: the dev server serves it, the build leaves it out
       input: { tv: 'index.html', phone: 'phone.html' },
-      output: { manualChunks: (id: string) => (id.includes('@dimforge/rapier3d-compat') ? 'rapier' : undefined) },
     },
   },
   test: {

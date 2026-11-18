@@ -169,7 +169,7 @@ h2 { margin: 0 0 4px; font-size: 32px; font-weight: 800; text-align: center; }
 .size.on { border-color: var(--ink); }
 .size .dot { width: var(--d); height: var(--d); border-radius: 50%; background: var(--crayon); }
 
-/* ---- the ring: Make / Fighters tabs, Crown (held), Again!, the roster ---- */
+/* ---- the match: Make / Fighters tabs, Crown (held), Again!, the roster ---- */
 :root { --gold: #ffcf3a; --gold-dark: #c99700; }
 .tabs {
   position: sticky; top: 0; z-index: 2;
@@ -188,7 +188,7 @@ h2 { margin: 0 0 4px; font-size: 32px; font-weight: 800; text-align: center; }
 }
 @keyframes dot { 50% { transform: scale(1.25); } }
 
-.ring-panel {
+.match-panel {
   display: flex; flex-direction: column; align-items: stretch; gap: 10px;
   background: var(--card); border-radius: 24px; padding: 14px; box-shadow: var(--shadow);
 }
@@ -210,8 +210,8 @@ h2 { margin: 0 0 4px; font-size: 32px; font-weight: 800; text-align: center; }
 .crown-hold { font-size: 15px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
 .crown-label { flex: 1; }
 .hold-note { text-align: center; font-size: 18px; font-weight: 700; color: var(--ink-soft); }
-.big.ring-again { min-height: 96px; font-size: 38px; font-weight: 900; background: var(--danger); box-shadow: 0 5px 0 #9b3322; }
-.big.ring-again:active:not(:disabled) { box-shadow: 0 1px 0 #9b3322; }
+.big.match-again { min-height: 96px; font-size: 38px; font-weight: 900; background: var(--danger); box-shadow: 0 5px 0 #9b3322; }
+.big.match-again:active:not(:disabled) { box-shadow: 0 1px 0 #9b3322; }
 
 .fighters { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 .fighter {

@@ -292,7 +292,7 @@ export class Workshop {
 }
 
 /**
- * What the TV does with a finished creature (saves it and sends it to the ring, or keeps it; either may return a promise of
+ * What the TV does with a finished creature (saves it and sends it to the fight, or keeps it; either may return a promise of
  * when it is done), `ready`: resolves when the stage is free for a new turn (Ruling R17: not during an arrival's camera
  * hold), and `opening`: the workshop is about to take the screen (the menu closes, the mouse is let go).
  */
@@ -383,7 +383,7 @@ export function connectWorkshop(bring: Pick<Bring, 'on' | 'onStatus' | 'setMakin
   };
 }
 
-// ---------- the screen: the dimmed ring, the stage, the drawing, the captions and the cards ----------
+// ---------- the screen: the dimmed level, the studio, the drawing, the captions and the cards ----------
 
 const OOPS_MS = 3000;
 const FADE_MS = 600;
@@ -402,7 +402,7 @@ export type WorkshopView = WorkshopUi & {
 };
 
 /**
- * The workshop's DOM half: a dim layer over the whole ring, the studio's canvas centred at 60 % of the height (16:10),
+ * The workshop's DOM half: a dim layer over the whole level, the studio's canvas centred at 60 % of the height (16:10),
  * the drawing (or the words in large type) pinned on the left, the maker's badge and name above, the caption below; on
  * the reveal the name in large type and the cards in a row. Sized in vh so it reads the same on any TV.
  */

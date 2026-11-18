@@ -3,7 +3,7 @@ import { Color, InstancedMesh, Matrix4, MeshBasicNodeMaterial, Quaternion, Spher
 /**
  * Motion trails for fliers (big-fights design §3): a short line of ghost balls in the fighter's colour left behind its
  * torso while it is in the air, each shrinking away. Every ghost of every trail is one instance of a single instanced
- * mesh made once (TRAILS × GHOSTS), so a whole flying ring is one draw call and nothing is allocated per frame. At most
+ * mesh made once (TRAILS × GHOSTS), so every trail on the stage is one draw call and nothing is allocated per frame. At most
  * TRAILS fighters trail at once; a trail's slot is freed once it has faded and its fighter has landed.
  */
 
@@ -11,7 +11,7 @@ import { Color, InstancedMesh, Matrix4, MeshBasicNodeMaterial, Quaternion, Spher
 export const TRAILS = 8, GHOSTS = 8;
 /** A ghost is dropped every TRAIL_EVERY s while flying, and shrinks away over TRAIL_LIFE s. */
 export const TRAIL_EVERY = 0.04, TRAIL_LIFE = 0.32;
-/** A new ghost's radius (× the fighter's ring height), never smaller than TRAIL_MIN m. */
+/** A new ghost's radius (× the fighter's fighting height), never smaller than TRAIL_MIN m. */
 const TRAIL_SIZE = 0.22, TRAIL_MIN = 0.12;
 const TRAIL_OPACITY = 0.45;
 
@@ -75,7 +75,7 @@ export class Trails {
 
   /**
    * Once a frame per fighter (`key`): while it flies (`air`) ghosts are dropped at its torso (`at`); either way its old
-   * ghosts shrink. `height` (its ring height, m) sizes them; `colour` is its own.
+   * ghosts shrink. `height` (its fighting height, m) sizes them; `colour` is its own.
    */
   update(key: object, at: { x: number; y: number; z: number }, height: number, air: boolean, colour: Color, dt: number): void {
     let s = this.byKey.get(key);

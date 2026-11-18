@@ -3,7 +3,7 @@ import type { BodyData } from '../builder/build';
 import type { ImageIn, View } from '../designer/types';
 import type { Recipe } from '../recipe/schema';
 import { planFor } from '../fight/moves';
-import { ragdollLayout } from '../physics/layout';
+import { bodyLayout } from '../anim/layout';
 import { createFighterObject } from './fighter-object';
 
 /** The canvas to borrow: its renderer and the stage it shows. */
@@ -29,8 +29,9 @@ export function viewDirection(view: View): Vector3 {
 
 /**
  * Photograph a creature in its rest pose on a plain background, framed to its size, from the
- * drawing's angle: the toon fighter (`createFighterObject`), as the ring shows it. Uses the main canvas for one
- * synchronous frame, then puts the stage back.
+ * drawing's angle: the toon fighter (`createFighterObject`), as the stage shows it. Uses the main canvas for one
+ * synchronous frame, then puts the stage back (its size and pixel ratio restored, and the creature freed, even when
+ * drawing fails).
  */
 export async function renderView(ctx: SnapshotContext, body: BodyData, recipe: Recipe, view: View, size = 768): Promise<ImageIn> {
   const { renderer } = ctx;
@@ -40,31 +41,42 @@ export async function renderView(ctx: SnapshotContext, body: BodyData, recipe: R
   const key = new DirectionalLight('#ffffff', 2.2);
   key.position.set(2, 4, 3);
   studio.add(key, key.target);
-  // the fighter as the ring shows it: toon colours, outline, googly eyes, at its ring size
-  const layout = ragdollLayout(body.skeleton, planFor(recipe, body.skeleton));
+  // the fighter as the stage shows it: toon colours, outline, googly eyes, at its fighting size
+  const layout = bodyLayout(body.skeleton, planFor(recipe, body.skeleton));
   const creature = createFighterObject(body, recipe, layout);
-  studio.add(creature.root);
+  let url: string;
+  try {
+    studio.add(creature.root);
+    const { min, max } = body.skeleton, s = layout.scale;
+    const center = new Vector3((min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2).multiplyScalar(s);
+    const radius = (new Vector3(max.x - min.x, max.y - min.y, max.z - min.z).length() / 2) * s;
+    const camera = new PerspectiveCamera(FOV, 1, radius * 0.05, radius * 20);
+    const dist = (radius / Math.sin(((FOV / 2) * Math.PI) / 180)) * 1.05;
+    camera.position.copy(center).addScaledVector(viewDirection(view), dist);
+    camera.lookAt(center);
 
-  const { min, max } = body.skeleton, s = layout.scale;
-  const center = new Vector3((min.x + max.x) / 2, (min.y + max.y) / 2, (min.z + max.z) / 2).multiplyScalar(s);
-  const radius = (new Vector3(max.x - min.x, max.y - min.y, max.z - min.z).length() / 2) * s;
-  const camera = new PerspectiveCamera(FOV, 1, radius * 0.05, radius * 20);
-  const dist = (radius / Math.sin(((FOV / 2) * Math.PI) / 180)) * 1.05;
-  camera.position.copy(center).addScaledVector(viewDirection(view), dist);
-  camera.lookAt(center);
-
-  await renderer.compileAsync(studio, camera);
-  const canvas = renderer.domElement;
-  const prev = { w: canvas.width, h: canvas.height, ratio: renderer.getPixelRatio() };
-  renderer.setPixelRatio(1);
-  renderer.setSize(size, size, false);
-  renderer.render(studio, camera);
-  const url = canvas.toDataURL('image/png'); // same task as the render
-  if (prev.w > 0 && prev.h > 0) {
-    renderer.setSize(prev.w / prev.ratio, prev.h / prev.ratio, false);
-    renderer.setPixelRatio(prev.ratio);
-    renderer.render(ctx.scene, ctx.camera); // put the stage back before the browser shows a frame
+    await renderer.compileAsync(studio, camera);
+    const canvas = renderer.domElement;
+    const prev = { w: canvas.width, h: canvas.height, ratio: renderer.getPixelRatio() };
+    renderer.setPixelRatio(1);
+    renderer.setSize(size, size, false);
+    try {
+      renderer.render(studio, camera);
+      url = canvas.toDataURL('image/png'); // same task as the render
+    } finally {
+      // the TV's canvas back at its own size and pixel ratio whatever happened (never left at the picture's size)
+      if (prev.w > 0 && prev.h > 0) {
+        renderer.setSize(prev.w / prev.ratio, prev.h / prev.ratio, false);
+        renderer.setPixelRatio(prev.ratio);
+        try {
+          renderer.render(ctx.scene, ctx.camera); // put the stage back before the browser shows a frame
+        } catch (e) {
+          console.warn('could not draw the stage again after a picture', e);
+        }
+      }
+    }
+  } finally {
+    creature.dispose();
   }
-  creature.dispose();
   return { base64: url.replace(/^data:image\/png;base64,/, ''), mediaType: 'image/png' };
 }

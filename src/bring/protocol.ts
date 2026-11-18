@@ -23,11 +23,11 @@ export const StepMsgSchema = z.discriminatedUnion('kind', [
 ]);
 export type StepMsg = z.infer<typeof StepMsgSchema>;
 
-// ---- the ring: what a phone may ask of the TV, and what the TV tells every phone ----
+// ---- the match: what a phone may ask of the TV, and what the TV tells every phone ----
 
 /** A roster id is short (`r` + time + random); the relay refuses anything longer before it reaches the TV. */
 export const ROSTER_ID_MAX = 64;
-/** What a phone may ask of the ring (POST /api/phone/command). The TV decides what it does (a crown with nobody
+/** What a phone may ask of the match (POST /api/phone/command). The TV decides what it does (a crown with nobody
  * fighting does nothing). Strict: an unknown kind or an extra field is refused. */
 export const PhoneCommandSchema = z.discriminatedUnion('kind', [
   z.strictObject({ kind: z.literal('crown') }),
@@ -39,37 +39,37 @@ export type PhoneCommand = z.infer<typeof PhoneCommandSchema>;
 /** The roster's own thumbs are JPEG data URLs under 20 000 characters (`MAX_THUMB_CHARS` in the roster). */
 const THUMB_MAX = 20_000;
 /** One roster creature as phones see it (the roster's `RosterSummary`). */
-export const RingEntrySchema = z.object({
+export const RosterEntrySchema = z.object({
   id: z.string().min(1).max(ROSTER_ID_MAX),
   name: z.string().max(200),
   maker: z.string().max(200),
   crowns: z.number().int().min(0),
   thumb: z.string().max(THUMB_MAX).regex(/^data:image\/jpeg;base64,[A-Za-z0-9+/=]*$/).nullable(),
 });
-export type RingEntry = z.infer<typeof RingEntrySchema>;
-export type RingPhase = 'open' | 'crowned';
-/** The ring as every phone sees it: the match phase, how many are fighting, and the roster to send back in. */
-export type Ring = { phase: RingPhase; fighting: number; roster: RingEntry[] };
+export type RosterEntry = z.infer<typeof RosterEntrySchema>;
+export type MatchPhase = 'open' | 'crowned';
+/** The match as every phone sees it: the match phase, how many are fighting, and the roster to send back in. */
+export type MatchNow = { phase: MatchPhase; fighting: number; roster: RosterEntry[] };
 
 /** A roster creature fit to send to the phones: as it is, or with no thumb when only its thumb is wrong (too big, not a
- * JPEG), or null when it cannot be sent at all (so one bad entry never spoils the whole ring). */
-export function ringEntry(e: unknown): RingEntry | null {
-  const ok = RingEntrySchema.safeParse(e);
+ * JPEG), or null when it cannot be sent at all (so one bad entry never spoils the whole news). */
+export function rosterEntry(e: unknown): RosterEntry | null {
+  const ok = RosterEntrySchema.safeParse(e);
   if (ok.success) return ok.data;
-  const bare = RingEntrySchema.safeParse({ ...(e as object), thumb: null });
+  const bare = RosterEntrySchema.safeParse({ ...(e as object), thumb: null });
   return bare.success ? bare.data : null;
 }
 
-/** The ring a TV page that has just registered shows the phones: nobody fighting, no roster (Crown and the old roster
+/** The match a TV page that has just registered shows the phones: nobody fighting, no roster (Crown and the old roster
  * buttons go until the TV says more). */
-export const EMPTY_RING: Ring = { phase: 'open', fighting: 0, roster: [] };
+export const EMPTY_MATCH: MatchNow = { phase: 'open', fighting: 0, roster: [] };
 
-/** Phones get at most this many roster creatures (each thumb is up to 20 kB, and every phone gets every ring). */
-export const RING_ROSTER_MAX = 60;
+/** Phones get at most this many roster creatures (each thumb is up to 20 kB, and every phone gets all the news). */
+export const MATCH_ROSTER_MAX = 60;
 /** The roster for the phones: champions first, then everyone else, each newest first as given (the roster lists newest
- * first), at most `RING_ROSTER_MAX`. */
-export function ringRoster<E extends { crowns: number }>(roster: readonly E[]): E[] {
-  return [...roster.filter((e) => e.crowns > 0), ...roster.filter((e) => !(e.crowns > 0))].slice(0, RING_ROSTER_MAX);
+ * first), at most `MATCH_ROSTER_MAX`. */
+export function cappedRoster<E extends { crowns: number }>(roster: readonly E[]): E[] {
+  return [...roster.filter((e) => e.crowns > 0), ...roster.filter((e) => !(e.crowns > 0))].slice(0, MATCH_ROSTER_MAX);
 }
 
 export type PhoneSnapshot = {
@@ -87,7 +87,7 @@ export type PhoneMsg =
   | { type: 'released' } | { type: 'kept' }
   | { type: 'failed'; message: string; retry: boolean }
   | { type: 'resting' } | { type: 'noHost' }
-  | ({ type: 'ring' } & Ring); // to every phone: the match phase and the roster changed (also after each hello)
+  | ({ type: 'match' } & MatchNow); // to every phone: the match phase and the roster changed (also after each hello)
 
 /** To the TV host (SSE). */
 export type HostMsg =
@@ -96,7 +96,7 @@ export type HostMsg =
   | { type: 'line'; line: { token: string; maker: Maker }[] }
   | { type: 'turn'; token: string; maker: Maker; input: DesignInput }
   | { type: 'tweak'; token: string; words: string } | { type: 'release'; token: string } | { type: 'cancel'; token: string }
-  | { type: 'command'; token: string; command: PhoneCommand } // a phone asks the ring for something
+  | { type: 'command'; token: string; command: PhoneCommand } // a phone asks the match for something
   | { type: 'replaced' };
 
 /** From the TV host about the phone on stage (POST /api/relay/host/send; the route adds the token). The relay fills
@@ -111,13 +111,13 @@ export const StageSendSchema = z.discriminatedUnion('type', [
 ]);
 export type StageSend = z.infer<typeof StageSendSchema>;
 /** From the TV host to every phone (the same route, no token): sent on every match phase change and roster change. The
- * relay caps the roster with `ringRoster`, so the schema allows a longer one. */
-export const RingSendSchema = z.object({
-  type: z.literal('ring'),
+ * relay caps the roster with `cappedRoster`, so the schema allows a longer one. */
+export const MatchSendSchema = z.object({
+  type: z.literal('match'),
   phase: z.enum(['open', 'crowned']),
   fighting: z.number().int().min(0).max(1000),
-  roster: z.array(RingEntrySchema).max(5000),
+  roster: z.array(RosterEntrySchema).max(5000),
 });
-export type RingSend = z.infer<typeof RingSendSchema>;
-export const HostSendSchema = z.discriminatedUnion('type', [...StageSendSchema.options, RingSendSchema]);
+export type MatchSend = z.infer<typeof MatchSendSchema>;
+export const HostSendSchema = z.discriminatedUnion('type', [...StageSendSchema.options, MatchSendSchema]);
 export type HostSend = z.infer<typeof HostSendSchema>;

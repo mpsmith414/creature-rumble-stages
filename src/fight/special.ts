@@ -46,3 +46,6 @@ export type SpecialCue = {
 
 /** A fighter's special as the show reads it each frame. `meter` 0..1 fills toward the next special. */
 export type SpecialState = { meter: number; active: SpecialName | null };
+
+/** The special's name as the announcer says it (the `{special}` slot): its title without the shout mark. */
+export const specialSaid = (s: SpecialName) => SPECIAL_TITLE[s].replace(/!+$/, '').trim();

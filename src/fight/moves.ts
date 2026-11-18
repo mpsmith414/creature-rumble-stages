@@ -1,7 +1,7 @@
 import type { BoneDef, Skeleton } from '../builder/skeleton';
 import type { Recipe, Role } from '../recipe/schema';
 import { dist } from '../util/vec';
-import { ringScale } from './scale';
+import { fightScale } from './scale';
 import { FightPlanSchema, type FightPlan, type Move } from './types';
 
 /** Heuristic thresholds (spec §3.3): × the torso's radius for hands, × the body's height for the rest. */
@@ -54,7 +54,7 @@ export function chooseMove(sk: Skeleton): Move {
   const torso = radius('torso') || R(sk.bones[0]);
   const hand = radius('hand');
   if (hand > 0 && hand >= BIG_HANDS * torso) return 'punch';
-  if (h * ringScale(h) < TINY_RING) return 'jab';
+  if (h * fightScale(h) < TINY_RING) return 'jab';
   if ((longest(sk, LEG)?.length ?? 0) >= LONG_LEGS * h) return 'kick';
   if (sk.bones.some((b) => b.role === 'wing')) return 'divebomb';
   if ((longest(sk, TAIL)?.length ?? 0) >= LONG_TAIL * h) return 'spin';

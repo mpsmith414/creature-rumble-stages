@@ -210,45 +210,45 @@ describe('HostClient', () => {
   });
 });
 
-describe('HostClient: the ring and phone commands (Task 16)', () => {
+describe('HostClient: the match broadcast and phone commands (Task 16)', () => {
   const fighter = (id: string, crowns = 0) => ({ id, name: id, maker: 'Zig', crowns, thumb: null });
 
-  it('sendRing posts the phase, how many fight and the roster (no token), capped at 60 with champions first', async () => {
+  it('sendMatch posts the phase, how many fight and the roster (no token), capped at 60 with champions first', async () => {
     const { server, client } = setup();
-    expect(await client.sendRing('open', 1, [fighter('a')])).toBe(false); // not registered yet
+    expect(await client.sendMatch('open', 1, [fighter('a')])).toBe(false); // not registered yet
     await client.start();
     const roster = Array.from({ length: 70 }, (_, i) => fighter(`r${i}`, i === 65 ? 1 : 0));
-    expect(await client.sendRing('crowned', 3, roster)).toBe(true);
+    expect(await client.sendMatch('crowned', 3, roster)).toBe(true);
     const call = server.calls.at(-1)!;
     expect(call.url).toBe('/api/relay/host/send?h=h1');
     const body = call.body as { type: string; phase: string; fighting: number; roster: { id: string }[] };
-    expect([body.type, body.phase, body.fighting]).toEqual(['ring', 'crowned', 3]);
+    expect([body.type, body.phase, body.fighting]).toEqual(['match', 'crowned', 3]);
     expect(body.roster).toHaveLength(60);
     expect(body.roster[0].id).toBe('r65');
     expect('token' in body).toBe(false);
     client.stop();
   });
 
-  it('sendRing checks each entry: a bad thumb is dropped, an entry that cannot be sent is left out, the rest still go', async () => {
+  it('sendMatch checks each entry: a bad thumb is dropped, an entry that cannot be sent is left out, the rest still go', async () => {
     const { server, client } = setup();
     await client.start();
     const good = { ...fighter('ok'), thumb: 'data:image/jpeg;base64,AAAA' };
     const bigThumb = { ...fighter('big'), thumb: `data:image/jpeg;base64,${'A'.repeat(20_000)}` };
     const badId = fighter('x'.repeat(65));
-    expect(await client.sendRing('open', 1, [good, bigThumb, badId])).toBe(true);
+    expect(await client.sendMatch('open', 1, [good, bigThumb, badId])).toBe(true);
     const body = server.calls.at(-1)!.body as { roster: unknown[] };
     expect(body.roster).toEqual([good, { ...fighter('big'), thumb: null }]);
     client.stop();
   });
 
-  it('after a fresh registration it sends the last ring again (a restarted relay forgot it)', async () => {
+  it('after a fresh registration it sends the last match broadcast again (a restarted relay forgot it)', async () => {
     const { server, client } = setup();
     await client.start();
-    await client.sendRing('open', 2, [fighter('a')]);
+    await client.sendMatch('open', 2, [fighter('a')]);
     server.state = 'unknown';
     FakeES.last.onerror!();
-    await until(() => server.registered === 2 && server.calls.filter((c) => (c.body as { type?: string } | undefined)?.type === 'ring').length === 2);
-    expect(server.calls.at(-1)).toEqual({ url: '/api/relay/host/send?h=h2', body: { type: 'ring', phase: 'open', fighting: 2, roster: [fighter('a')] } });
+    await until(() => server.registered === 2 && server.calls.filter((c) => (c.body as { type?: string } | undefined)?.type === 'match').length === 2);
+    expect(server.calls.at(-1)).toEqual({ url: '/api/relay/host/send?h=h2', body: { type: 'match', phase: 'open', fighting: 2, roster: [fighter('a')] } });
     client.stop();
   });
 

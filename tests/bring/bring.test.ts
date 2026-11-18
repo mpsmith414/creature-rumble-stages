@@ -29,7 +29,7 @@ function setup() {
     ev = e;
     return {
       start: async () => {}, stop: () => {}, reclaim: async () => void s0.reclaimed++, send: async (t, m) => (sent.push([t, m]), true),
-      sendRing: async (...a) => (rings.push(a), true), onCommand: (fn) => (commands.add(fn), () => void commands.delete(fn)),
+      sendMatch: async (...a) => (rings.push(a), true), onCommand: (fn) => (commands.add(fn), () => void commands.delete(fn)),
     };
   });
   return { card, bring, sent, rings, commands, reclaimed: () => s0.reclaimed, msg: (m: HostMsg) => ev.onMsg(m), ev: () => ev };
@@ -238,11 +238,11 @@ describe('createBring', () => {
   });
 });
 
-describe('createBring: the ring (Task 16)', () => {
-  it('sendRing and onCommand go straight to the host client', async () => {
+describe('createBring: the match broadcast (Task 16)', () => {
+  it('sendMatch and onCommand go straight to the host client', async () => {
     const s = setup();
     const roster = [{ id: 'r1', name: 'Zib', maker: 'Zig', crowns: 1, thumb: null }];
-    expect(await s.bring.sendRing('open', 2, roster)).toBe(true);
+    expect(await s.bring.sendMatch('open', 2, roster)).toBe(true);
     expect(s.rings).toEqual([['open', 2, roster]]);
     const got: unknown[] = [];
     const off = s.bring.onCommand((token, command) => got.push([token, command]));

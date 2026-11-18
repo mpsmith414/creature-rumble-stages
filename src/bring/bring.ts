@@ -1,10 +1,10 @@
 import { cardWanted, type CardMode, type JoinCard } from './card';
 import { HostClient, type HostEvents, type HostInfo } from './host';
-import type { HostMsg, HostSend, Maker, PhoneCommand, RingEntry, RingPhase } from './protocol';
+import type { HostMsg, HostSend, Maker, PhoneCommand, RosterEntry, MatchPhase } from './protocol';
 
 /** What the bring-it-to-life wiring needs of the card and of the host client (so tests can fake them). */
 export type CardView = Pick<JoinCard, 'show' | 'line' | 'hide' | 'visible'>;
-type Client = Pick<HostClient, 'start' | 'stop' | 'send' | 'reclaim' | 'sendRing' | 'onCommand'>;
+type Client = Pick<HostClient, 'start' | 'stop' | 'send' | 'reclaim' | 'sendMatch' | 'onCommand'>;
 type Person = { token: string; maker: Maker };
 type HostStatus = Parameters<HostEvents['onStatus']>[0];
 
@@ -12,14 +12,16 @@ type HostStatus = Parameters<HostEvents['onStatus']>[0];
  * The TV's side of "bring it to life": hosts the phones, keeps the join card up to date and hands the relay's
  * messages (`turn`, `tweak`, `release`, `cancel` ...) to whoever listens with `on`. The workshop hooks in there (see
  * `connectWorkshop`), answers the phone with `send`, and calls `setMaking(false)` when the creature on the stage is done with.
- * The ring hooks in with `onCommand` (a phone's crown, again or send-back) and `sendRing` (the match phase and roster,
+ * The Rumble hooks in with `onCommand` (a phone's crown, again or send-back) and `sendMatch` (the match phase and roster,
  * to every phone). While the stage or an arrival has the screen (`setStage`, Ruling R21) the card steps aside, whatever
- * its mode.
+ * its mode. The card starts in `o.mode` (the TV passes the one it remembered: `auto` by default) and every toggle's
+ * new mode goes to `o.onMode`.
  */
-export function createBring(card: CardView, makeClient: (ev: HostEvents) => Client = (ev) => new HostClient(ev)) {
+export function createBring(card: CardView, makeClient: (ev: HostEvents) => Client = (ev) => new HostClient(ev),
+  o: { mode?: CardMode; onMode?(mode: CardMode): void } = {}) {
   const phones = new Map<string, Maker>(); // everyone connected, in the order they came
   let info: HostInfo | null = null, line: Person[] = [];
-  let mode: CardMode = 'auto', making = false, replaced = false, stage = false;
+  let mode: CardMode = o.mode ?? 'auto', making = false, replaced = false, stage = false;
   const listeners = new Set<(m: HostMsg) => void>();
   const statusListeners = new Set<(s: HostStatus, fresh?: boolean) => void>();
 
@@ -69,8 +71,8 @@ export function createBring(card: CardView, makeClient: (ev: HostEvents) => Clie
     stop: () => client.stop(),
     send: (token: string, msg: HostSend) => client.send(token, msg),
     /** Tell every phone the match phase, how many are fighting and the roster (on every phase or roster change). */
-    sendRing: (phase: RingPhase, fighting: number, roster: readonly RingEntry[]) => client.sendRing(phase, fighting, roster),
-    /** Hear the phones' ring commands with the sending phone's token; returns the way to stop. */
+    sendMatch: (phase: MatchPhase, fighting: number, roster: readonly RosterEntry[]) => client.sendMatch(phase, fighting, roster),
+    /** Hear the phones' match commands with the sending phone's token; returns the way to stop. */
     onCommand: (fn: (token: string, command: PhoneCommand) => void) => client.onCommand(fn),
     /** Hear every message from the relay; returns the way to stop. */
     on(fn: (m: HostMsg) => void) {
@@ -94,10 +96,11 @@ export function createBring(card: CardView, makeClient: (ev: HostEvents) => Clie
     /**
      * The menu's "Add a creature": a card that is showing goes off (even with phones connected), a hidden one goes on
      * (even with nobody there) and stays until toggled off. On a page that a newer TV page replaced it also takes
-     * hosting back. Returns whether the card is now shown.
+     * hosting back. Returns whether the card is now shown. The new mode goes to `onMode` (the TV remembers it).
      */
     toggle() {
       mode = shown() ? 'off' : 'on';
+      o.onMode?.(mode);
       if (replaced && mode === 'on') {
         replaced = false;
         void client.reclaim();

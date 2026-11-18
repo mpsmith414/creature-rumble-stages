@@ -1,8 +1,9 @@
 # Creature Rumble
 
-A family TV game. Everyone makes a creature on their phone, and the TV turns them into upright cartoon fighters that make
-big entrances and flop around a padded ring until the last one standing is crowned champion. An announcer calls the
-fight out loud, and every line is also shown on screen.
+A family TV game. Everyone makes a creature on their phone, and the TV turns them into upright cartoon fighters that drop
+into a side-view platform fight on a themed level (a jungle, a space ship, a toy room) and bonk each other off it, with
+presents from the sky and a little mischief from the level, until the last one standing is crowned champion. An
+announcer calls the fight out loud, and every line is also shown on screen.
 
 ## Setup
 
@@ -40,10 +41,28 @@ crowns by accident).
 
 Use a TV remote, a keyboard or a game controller.
 
-- **Enter** or the remote's **Menu** key opens the menu (Start on a controller). **Back** or **Esc** closes it.
+- **Enter** or the remote's **Menu** key opens the menu (**Select** on a controller nobody is playing with). **Back** or
+  **Esc** closes it.
 - The menu has: **Crown the champion!** and **Again!** (they appear when they can be used), **Fighters** (send a past
-  fighter back in), **Show join code**, **Sound** (quieter, louder, on/off), **Clear the ring** and **Back to the fight**.
+  fighter back in), **Level** (Jungle, Space Ship or Toy Room), **Show join code**, **Sound** (quieter, louder, on/off),
+  **Clear the stage** and **Back to the fight**.
 - The arrow keys (or the d-pad) move around the menu, and Enter presses a button.
+- **J** shows or hides the join code (the TV remembers which).
+
+## Playing with a controller
+
+Plug in a game controller (up to four) and steer a creature yourself; everyone else is played by the computer.
+
+- Press **A** or **Start** to pick a creature. Move along the row and press **A** to choose (**B** goes back).
+- **A** jump, **X** attack, **Y** special, **B** grab, **RB** use a power-up, **LB** or **RT** dodge. Move with the
+  stick or the d-pad.
+- Hold **Start** and **Select** together to stop playing (the computer takes the creature back).
+- Put the controller down for 20 seconds and the creature rests: the computer plays it until you touch the controller
+  again.
+- If your creature is knocked out, wait a moment and press **A** or **Start** to pick again.
+- **Select** (or the remote's Menu key, or Enter) opens the TV menu, where you crown the champion. Pressing A never
+  opens it, so nobody crowns by accident.
+- **J** on the keyboard shows or hides the join code.
 
 ## Tests
 

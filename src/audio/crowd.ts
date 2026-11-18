@@ -14,7 +14,7 @@ export interface Crowd {
   stop(): void;
   /** Rise (or fall) to `level` 0..1 of the bed's full volume over `seconds`, and stay there. */
   swell(level: number, seconds: number): void;
-  /** After names and ring-outs: a quick surge, then back to the resting bed. */
+  /** After names and knockouts: a quick surge, then back to the resting bed. */
   roar(): void;
   /** For a tie: a sag in volume with the crowd's pitch sliding down. */
   aww(): void;

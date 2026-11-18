@@ -10,7 +10,7 @@ export type PhoneClient = {
   tweak(words: string): Promise<string>;
   release(): Promise<string>;
   cancel(): Promise<string>;
-  /** Ask the ring for something (crown, again, send a fighter back in): 'sent', 'noHost', 'slow' (too many at once),
+  /** Ask the match for something (crown, again, send a fighter back in): 'sent', 'noHost', 'slow' (too many at once),
    * 'offline' or 'unknown' (the TV does not know this phone: it asks for a rescan). */
   command(c: PhoneCommand): Promise<string>;
   /** Rejoin now and reopen the stream: after a screen lock the old stream can be dead without ever erroring. */

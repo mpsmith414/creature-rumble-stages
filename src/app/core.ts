@@ -1,4 +1,3 @@
-import type RAPIER from '@dimforge/rapier3d-compat';
 import type { PerspectiveCamera, Scene, WebGPURenderer } from 'three/webgpu';
 import type { Announcer } from '../announcer/announcer';
 import type { Crowd } from '../audio/crowd';
@@ -15,12 +14,12 @@ import type { RosterLike } from './wiring';
 
 /**
  * The mode-neutral core (spec §6.4): what every mode (the Rumble now, the Super Race later) shares — the renderer and
- * the 3D stage, the physics world, sound and the announcer, the roster, the phones and the workshop that makes
- * creatures, and the words on screen. A mode (`startRumble`) adds its own arena, rules and show on top. Nothing here
- * may import from src/match, src/arena or src/show/entrance.ts (tests/app/boundary.test.ts).
+ * the 3D scene, sound and the announcer, the roster, the phones and the workshop that makes creatures, and the words
+ * on screen. A mode (`startRumble`) adds its own levels, rules and show on top. Nothing here may import from
+ * src/match, src/stage, src/levels or the fight's game code (tests/app/boundary.test.ts).
  */
 export type Core = {
-  renderer: WebGPURenderer; scene: Scene; camera: PerspectiveCamera; world: RAPIER.World;
+  renderer: WebGPURenderer; scene: Scene; camera: PerspectiveCamera;
   mixer: Mixer; sfx: Sfx; crowd: Crowd; announcer: Announcer;
   roster: RosterLike; bring: Bring; workshop: Workshop;
   banner: Banner; pops: Pops;

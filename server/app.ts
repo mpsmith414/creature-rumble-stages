@@ -101,7 +101,7 @@ async function twice<S extends z.ZodType, T>(call: () => Promise<unknown>, schem
  * the phone relay's routes; `opts.host` is the address phones reach this PC at (default: its first LAN address; `server/index.ts` adds the `PHONE_HOST` override).
  * `opts.voice` mounts the narrator's voice (`/api/voice`). `opts.address` says where a request came from (default: the
  * Node socket): hosting the relay (`/api/relay/host*`) and setting the daily limit (`POST /api/cap`) are for the TV on
- * this PC only, so anyone else gets 403 (a phone on the Wi-Fi must not take over the TV's phones or push a fake ring). */
+ * this PC only, so anyone else gets 403 (a phone on the Wi-Fi must not take over the TV's phones or push fake match news). */
 export function createApp(model: DesignerModel, opts?: {
   cap?: DailyCap; relay?: Relay; host?: () => string; heartbeatMs?: number; voice?: { synth: Synth | ((voice: string) => Synth); cache: VoiceCache };
   address?: (c: Context) => string | undefined;

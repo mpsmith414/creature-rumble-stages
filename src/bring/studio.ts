@@ -23,7 +23,7 @@ export type Studio = {
   render(): void;
   /**
    * A picture of a body in its rest pose for the designer or a thumbnail, with the studio's renderer (`renderView`): the
-   * toon fighter as the ring shows it (outline, googly eyes, ring size).
+   * toon fighter as the stage shows it (outline, googly eyes, fighting size).
    */
   snapshot(body: BodyData, recipe: Recipe, view: View, size?: number): Promise<ImageIn>;
   dispose(): void;

@@ -22,6 +22,13 @@ describe('the system prompt', () => {
     expect(SYSTEM_PROMPT).not.toMatch(/"shaggy"|"woolly"/);
   });
 
+  it('describes the stages: side-view platform fights on themed levels, bouncy and slapstick, with no ring and nothing floppy', () => {
+    for (const s of ['seen from the side', 'platforms', 'themed level', 'bouncy', 'slapstick']) expect(SYSTEM_PROMPT).toContain(s);
+    expect(SYSTEM_PROMPT).not.toMatch(/\bring\b|flop|padded|ball pit|wrestling match/i);
+    // the announcer's intro keeps its big-show style
+    for (const s of ['In this corner!', 'The one, the only...', 'every sentence ending in an exclamation mark']) expect(SYSTEM_PROMPT).toContain(s);
+  });
+
   it('keeps the kind-and-safe and kid-card sections', () => {
     for (const s of ['# Being kind and safe', '"noCreature"', '"declined"', '# Kid cards', '# The checklist', '# Looking again']) expect(SYSTEM_PROMPT).toContain(s);
     expect(SYSTEM_PROMPT).toMatch(/220 characters/);

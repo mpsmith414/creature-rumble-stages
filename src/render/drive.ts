@@ -1,13 +1,13 @@
 import { Matrix4, Quaternion, Vector2, Vector3, type Object3D } from 'three/webgpu';
-import type { RagdollLayout } from '../physics/layout';
-import { restPlacement, type Ragdoll } from '../physics/ragdoll';
+import { restPieces } from '../anim/rest';
+import type { BodyLayout } from '../anim/layout';
 import type { Vec3 } from '../util/vec';
 import type { FighterObject } from './fighter-object';
 
 const ONE = new Vector3(1, 1, 1);
 
 /**
- * Each bone's world matrix in the rest pose (bones carry no turn at rest): at its start × `scale` (the ring scale),
+ * Each bone's world matrix in the rest pose (bones carry no turn at rest): at its start × `scale` (the fighting scale),
  * scaled by it. `starts` are creature space, the jaw already raised shut.
  */
 export function restBoneMatrices(starts: Vec3[], scale: number): Matrix4[] {
@@ -15,23 +15,20 @@ export function restBoneMatrices(starts: Vec3[], scale: number): Matrix4[] {
   return starts.map((p) => new Matrix4().compose(new Vector3(p.x, p.y, p.z).multiplyScalar(scale), q, s));
 }
 
-/** Each segment's piece at rest (the ragdoll's `restP`/`restQ`), as a matrix. */
-export function pieceRestMatrices(layout: Pick<RagdollLayout, 'segments'>): Matrix4[] {
-  return layout.segments.map((seg) => {
-    const { p, q } = restPlacement(seg);
-    return new Matrix4().compose(p, q, ONE);
-  });
+/** Each segment's piece at rest (the poses' rest), as a matrix. */
+export function pieceRestMatrices(layout: Pick<BodyLayout, 'segments'>): Matrix4[] {
+  return restPieces(layout);
 }
 
 /**
  * Where each bone is now: bone i rides rigidly on its segment's piece s = `boneSegment[i]`, so its world matrix is
  * pieceNow[s] × pieceRest[s]⁻¹ × restBones[i]. Pure; writes into `out` when given (no new matrices each frame).
  */
-export function boneWorld(layout: Pick<RagdollLayout, 'boneSegment'>, restBones: Matrix4[], pieceRest: Matrix4[], pieceNow: Matrix4[],
-  out: Matrix4[] = restBones.map(() => new Matrix4())): Matrix4[] {
+export function boneWorld(layout: Pick<BodyLayout, 'boneSegment'>, restBones: readonly Matrix4[], pieceRest: readonly Matrix4[],
+  pieceNow: readonly Matrix4[], out: Matrix4[] = restBones.map(() => new Matrix4())): Matrix4[] {
   while (moved.length < pieceNow.length) moved.push(new Matrix4());
-  pieceNow.forEach((now, s) => moved[s].multiplyMatrices(now, _move.copy(pieceRest[s]).invert()));
-  restBones.forEach((rest, i) => out[i].multiplyMatrices(moved[layout.boneSegment[i]], rest));
+  for (let s = 0; s < pieceNow.length; s++) moved[s].multiplyMatrices(pieceNow[s], _move.copy(pieceRest[s]).invert());
+  for (let i = 0; i < restBones.length; i++) out[i].multiplyMatrices(moved[layout.boneSegment[i]], restBones[i]);
   return out;
 }
 /** boneWorld's scratch: each piece's move from rest. */
@@ -60,7 +57,7 @@ export class GooglyEye {
   private readonly max: number;
   private readonly target = new Vector2();
 
-  /** `radius`: the eyeball's radius (m, in the ring). */
+  /** `radius`: the eyeball's radius (m, at fighting size). */
   constructor(readonly radius: number, readonly pupil: { position: Vector3 } | null = null, readonly ball: Object3D | null = null) {
     this.max = PUPIL_MAX * radius;
   }
@@ -89,55 +86,81 @@ export class GooglyEye {
   }
 }
 
-/** Per fighter: the pieces' rest matrices (for the ragdoll they were read from) and scratch for every frame. */
-type Scratch = { ragdoll: Ragdoll; rest: Matrix4[]; now: Matrix4[]; q: Quaternion[]; out: Matrix4[] };
-const scratches = new WeakMap<FighterObject, Scratch>();
 const _p = new Vector3(), _inv = new Matrix4(), _q = new Quaternion(), _qi = new Quaternion(), _lv = new Vector3(), _av = new Vector3();
+const _up = new Vector3(0, 1, 0), _place = new Matrix4();
 
-function scratchFor(obj: FighterObject, ragdoll: Ragdoll): Scratch {
-  let s = scratches.get(obj);
-  if (!s || s.ragdoll !== ragdoll) {
+/**
+ * The pieces of a creature standing at rest with its origin (the ground under it) at `at`, turned by `yaw` about +y:
+ * each `rest` piece moved there as one rigid body (for still line-ups like the dev pages' and tests). Writes into `out`.
+ */
+export function placedPieces(rest: readonly Matrix4[], at: Vector3, yaw: number, out: Matrix4[] = rest.map(() => new Matrix4())): Matrix4[] {
+  _place.compose(at, _q.setFromAxisAngle(_up, yaw), ONE);
+  for (let k = 0; k < rest.length; k++) out[k].multiplyMatrices(_place, rest[k]);
+  return out;
+}
+
+/** Sets every bone's world matrix to bone = pieceNow × pieceRest⁻¹ × restBone (and its matrix under the root to match). */
+function placeBones(obj: FighterObject, rest: readonly Matrix4[], now: readonly Matrix4[], out: Matrix4[]): void {
+  boneWorld(obj, obj.restBones, rest, now, out);
+  obj.root.updateWorldMatrix(true, false);
+  _inv.copy(obj.root.matrixWorld).invert();
+  for (let i = 0; i < obj.bones.length; i++) {
+    const b = obj.bones[i];
+    b.matrix.multiplyMatrices(_inv, out[i]); // the scene's next update gives it back: root × matrix
+    b.matrixWorld.copy(out[i]);
+    b.matrixWorldNeedsUpdate = true;
+  }
+}
+
+/** Per fighter driven by poses: bone scratch, and last frame's pieces (their motion wobbles the eyes). */
+type PoseScratch = { out: Matrix4[]; lastP: Vector3[]; lastQ: Quaternion[]; restQ: Quaternion[]; seen: boolean };
+const poseScratches = new WeakMap<FighterObject, PoseScratch>();
+const _s = new Vector3(), _dq = new Quaternion();
+
+function poseScratchFor(obj: FighterObject): PoseScratch {
+  let s = poseScratches.get(obj);
+  if (!s) {
     s = {
-      ragdoll,
-      rest: ragdoll.pieces.map((p) => new Matrix4().compose(p.restP, p.restQ, ONE)),
-      now: ragdoll.pieces.map(() => new Matrix4()),
-      q: ragdoll.pieces.map(() => new Quaternion()),
       out: obj.bones.map(() => new Matrix4()),
+      lastP: obj.pieceRest.map(() => new Vector3()),
+      lastQ: obj.pieceRest.map(() => new Quaternion()),
+      restQ: obj.pieceRest.map((m) => {
+        const q = new Quaternion();
+        m.decompose(_p, q, _s);
+        return q;
+      }),
+      seen: false,
     };
-    scratches.set(obj, s);
+    poseScratches.set(obj, s);
   }
   return s;
 }
 
 /**
- * Puts the fighter's bones where its ragdoll's pieces are (`boneWorld`), and, given the frame's `dt` (s), wobbles its
- * googly eyes with the motion of the piece each one sits on. Call once a frame after the physics step. The fighter's
- * root may be scaled but not turned or moved (its bones are placed in the world).
+ * Puts the fighter's bones where the given pieces are (one world matrix per segment, as `poseSegments` makes them).
+ * Given the frame's `dt` (s), the googly eyes wobble with how each eye's piece moved
+ * since the last call (the first call only remembers). Allocates nothing per frame.
  */
-export function driveBones(obj: FighterObject, ragdoll: Ragdoll, dt = 0): void {
-  const s = scratchFor(obj, ragdoll);
-  ragdoll.pieces.forEach((p, k) => {
-    const t = p.body.translation(), r = p.body.rotation();
-    s.q[k].set(r.x, r.y, r.z, r.w);
-    s.now[k].compose(_p.set(t.x, t.y, t.z), s.q[k], ONE);
-  });
-  boneWorld(obj, obj.restBones, s.rest, s.now, s.out);
-  obj.root.updateWorldMatrix(true, false);
-  _inv.copy(obj.root.matrixWorld).invert();
-  obj.bones.forEach((b, i) => {
-    b.matrix.multiplyMatrices(_inv, s.out[i]); // the scene's next update gives it back: root × matrix
-    b.matrixWorld.copy(s.out[i]);
-    b.matrixWorldNeedsUpdate = true;
-  });
-  if (!(dt > 0)) return;
-  for (const e of obj.eyes) {
-    const k = obj.boneSegment[e.bone], piece = ragdoll.pieces[k];
-    if (!piece) continue;
-    // the eye's frame now: its gaze on the bone, turned as the piece has turned from rest; motion is read in it
-    _q.copy(s.q[k]).multiply(_qi.copy(piece.restQ).invert());
+export function driveBonesFrom(obj: FighterObject, pieceNow: readonly Matrix4[], dt = 0): void {
+  const s = poseScratchFor(obj);
+  placeBones(obj, obj.pieceRest, pieceNow, s.out);
+  if (dt > 0 && s.seen) for (const e of obj.eyes) {
+    const k = obj.boneSegment[e.bone], now = pieceNow[k];
+    if (!now) continue;
+    now.decompose(_p, _q, _s);
+    _lv.copy(_p).sub(s.lastP[k]).divideScalar(dt);
+    // the turn since last frame, as an angular speed: angle × axis / dt (the shorter way round)
+    _dq.copy(_q).multiply(_qi.copy(s.lastQ[k]).invert());
+    if (_dq.w < 0) _dq.set(-_dq.x, -_dq.y, -_dq.z, -_dq.w);
+    const sinHalf = Math.hypot(_dq.x, _dq.y, _dq.z), angle = 2 * Math.atan2(sinHalf, _dq.w);
+    if (sinHalf > 1e-9) _av.set(_dq.x, _dq.y, _dq.z).multiplyScalar(angle / sinHalf / dt);
+    else _av.set(0, 0, 0);
+    // read in the eye's own frame: its gaze on the bone, turned as the piece has turned from rest
+    _q.multiply(_qi.copy(s.restQ[k]).invert());
     if (e.ball) _q.multiply(e.ball.quaternion);
     _q.invert();
-    const lv = piece.body.linvel(), av = piece.body.angvel();
-    e.update(dt, _lv.set(lv.x, lv.y, lv.z).applyQuaternion(_q), _av.set(av.x, av.y, av.z).applyQuaternion(_q));
+    e.update(dt, _lv.applyQuaternion(_q), _av.applyQuaternion(_q));
   }
+  for (let k = 0; k < pieceNow.length && k < s.lastP.length; k++) pieceNow[k].decompose(s.lastP[k], s.lastQ[k], _s);
+  s.seen = true;
 }

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Relay } from '../../server/relay';
 import {
-  BADGES, CODE_LETTERS, HostSendSchema, PhoneCommandSchema, RING_ROSTER_MAX, ringEntry, ringRoster,
-  type DesignInput, type HostSend, type HostMsg, type PhoneMsg, type RingEntry,
+  BADGES, CODE_LETTERS, HostSendSchema, PhoneCommandSchema, MATCH_ROSTER_MAX, rosterEntry, cappedRoster,
+  type DesignInput, type HostSend, type HostMsg, type PhoneMsg, type RosterEntry,
 } from '../../src/bring/protocol';
 
 const cards = { name: 'Bob', eats: 'flowers 🌸', speed: 'slow 🐌', mood: 'shy 🙈', special: 'six legs' };
@@ -749,9 +749,9 @@ describe('Relay a reattached host and the cancel it may have missed (final revie
   });
 });
 
-describe('Relay ring: phone commands and the ring broadcast (Task 16)', () => {
-  const entry = (id: string, crowns = 0): RingEntry => ({ id, name: `Fighter ${id}`, maker: 'Zig', crowns, thumb: null });
-  const ring = (over: Partial<{ phase: 'open' | 'crowned'; fighting: number; roster: RingEntry[] }> = {}) =>
+describe('Relay: phone commands and the match broadcast (Task 16)', () => {
+  const entry = (id: string, crowns = 0): RosterEntry => ({ id, name: `Fighter ${id}`, maker: 'Zig', crowns, thumb: null });
+  const matchMsg = (over: Partial<{ phase: 'open' | 'crowned'; fighting: number; roster: RosterEntry[] }> = {}) =>
     ({ phase: 'open' as const, fighting: 2, roster: [entry('r1', 1), entry('r2')], ...over });
 
   it('relay forwards a phone command to the host', () => {
@@ -775,57 +775,57 @@ describe('Relay ring: phone commands and the ring broadcast (Task 16)', () => {
     expect(s.host).toEqual([]);
   });
 
-  it('ring broadcast reaches every phone', () => {
+  it('the match broadcast reaches every phone', () => {
     const s = setup();
     const a = s.join('Ann'), b = s.join('Bo');
     s.clearAll();
-    expect(s.relay.ring(s.hostId, ring())).toBe(true);
-    for (const p of [a, b]) expect(p.msgs).toEqual([{ type: 'ring', ...ring() }]);
-    // a phone that opens its stream later hears the latest ring straight after its hello
+    expect(s.relay.match(s.hostId, matchMsg())).toBe(true);
+    for (const p of [a, b]) expect(p.msgs).toEqual([{ type: 'match', ...matchMsg() }]);
+    // a phone that opens its stream later hears the latest match straight after its hello
     const c = s.join('Cy');
-    expect(c.msgs).toEqual([{ type: 'hello', state: { phase: 'idle' } }, { type: 'ring', ...ring() }]);
-    s.relay.ring(s.hostId, ring({ phase: 'crowned' }));
-    for (const p of [a, b, c]) expect(p.msgs.at(-1)).toEqual({ type: 'ring', ...ring({ phase: 'crowned' }) });
+    expect(c.msgs).toEqual([{ type: 'hello', state: { phase: 'idle' } }, { type: 'match', ...matchMsg() }]);
+    s.relay.match(s.hostId, matchMsg({ phase: 'crowned' }));
+    for (const p of [a, b, c]) expect(p.msgs.at(-1)).toEqual({ type: 'match', ...matchMsg({ phase: 'crowned' }) });
   });
 
-  it('a ring from a host id that is not the host is refused', () => {
+  it('a match from a host id that is not the host is refused', () => {
     const s = setup();
     const a = s.join('Ann');
     s.clearAll();
-    expect(s.relay.ring('someone-else', ring())).toBe(false);
+    expect(s.relay.match('someone-else', matchMsg())).toBe(false);
     expect(a.msgs).toEqual([]);
   });
 
-  it('a newly registered host starts with no ring (its match is new); a reattached one keeps it', () => {
+  it('a newly registered host starts with no match broadcast (its match is new); a reattached one keeps it', () => {
     const s = setup();
-    s.relay.ring(s.hostId, ring());
+    s.relay.match(s.hostId, matchMsg());
     s.relay.detachHost(s.hostId, s.hostSink);
     s.relay.hostStream(s.hostId, s.hostSink);
-    expect(s.join('Ann').msgs.at(-1)).toEqual({ type: 'ring', ...ring() });
+    expect(s.join('Ann').msgs.at(-1)).toEqual({ type: 'match', ...matchMsg() });
     s.relay.registerHost(() => {}, 'http://tv:5180/phone.html');
     expect(s.join('Bo').msgs).toEqual([{ type: 'hello', state: { phase: 'idle' } }]);
   });
 
-  it('a new TV page empties the ring on phones that heard one (no stale Crown or roster), and only those', () => {
+  it('a new TV page empties the match on phones that heard one (no stale Crown or roster), and only those', () => {
     const s = setup();
     const a = s.join('Ann');
-    s.relay.ring(s.hostId, ring());
+    s.relay.match(s.hostId, matchMsg());
     a.msgs.length = 0;
     s.relay.registerHost(() => {}, 'http://tv:5180/phone.html');
-    expect(a.msgs).toContainEqual({ type: 'ring', phase: 'open', fighting: 0, roster: [] });
+    expect(a.msgs).toContainEqual({ type: 'match', phase: 'open', fighting: 0, roster: [] });
     a.msgs.length = 0;
-    s.relay.registerHost(() => {}, 'http://tv:5180/phone.html'); // no ring since: nothing stale to clear
-    expect(a.msgs.some((m) => m.type === 'ring')).toBe(false);
+    s.relay.registerHost(() => {}, 'http://tv:5180/phone.html'); // no match since: nothing stale to clear
+    expect(a.msgs.some((m) => m.type === 'match')).toBe(false);
   });
 
-  it('a phone woken by a returning host hears the ring too', () => {
+  it('a phone woken by a returning host hears the match too', () => {
     const s = setup();
-    s.relay.ring(s.hostId, ring());
+    s.relay.match(s.hostId, matchMsg());
     s.relay.detachHost(s.hostId, s.hostSink);
     const a = s.join('Ann'); // the TV is away: hello, noHost
     a.msgs.length = 0;
     s.relay.hostStream(s.hostId, s.hostSink);
-    expect(a.msgs).toEqual([{ type: 'hello', state: { phase: 'idle' } }, { type: 'ring', ...ring() }]);
+    expect(a.msgs).toEqual([{ type: 'hello', state: { phase: 'idle' } }, { type: 'match', ...matchMsg() }]);
   });
 
   it('a command with no TV listening says noHost', () => {
@@ -849,25 +849,25 @@ describe('Relay ring: phone commands and the ring broadcast (Task 16)', () => {
     expect(s.host.filter((m) => m.type === 'command' && m.token === a.token)).toHaveLength(6);
   });
 
-  it('the ring broadcast keeps at most 60 fighters: champions first, then the newest', () => {
+  it('the match broadcast keeps at most 60 fighters: champions first, then the newest', () => {
     const s = setup();
     const a = s.join('Ann');
     s.clearAll();
     const roster = Array.from({ length: 100 }, (_, i) => entry(`r${i}`, i === 70 || i === 99 ? 2 : 0)); // newest first
-    s.relay.ring(s.hostId, ring({ roster }));
-    const got = a.msgs[0] as Extract<PhoneMsg, { type: 'ring' }>;
-    expect(got.roster).toHaveLength(RING_ROSTER_MAX);
+    s.relay.match(s.hostId, matchMsg({ roster }));
+    const got = a.msgs[0] as Extract<PhoneMsg, { type: 'match' }>;
+    expect(got.roster).toHaveLength(MATCH_ROSTER_MAX);
     expect(got.roster.map((e) => e.id)).toEqual(['r70', 'r99', ...roster.slice(0, 58).map((e) => e.id)]);
   });
 });
 
-describe('protocol: phone commands and the ring', () => {
-  const entry = (id: string, crowns = 0): RingEntry => ({ id, name: id, maker: 'Zig', crowns, thumb: null });
+describe('protocol: phone commands and the match broadcast', () => {
+  const entry = (id: string, crowns = 0): RosterEntry => ({ id, name: id, maker: 'Zig', crowns, thumb: null });
 
-  it('ringRoster: champions first (newest first among them), then the newest, at most 60', () => {
-    expect(RING_ROSTER_MAX).toBe(60);
-    expect(ringRoster([entry('a'), entry('b', 1), entry('c'), entry('d', 3)]).map((e) => e.id)).toEqual(['b', 'd', 'a', 'c']);
-    expect(ringRoster(Array.from({ length: 61 }, (_, i) => entry(`x${i}`)))).toHaveLength(60);
+  it('cappedRoster: champions first (newest first among them), then the newest, at most 60', () => {
+    expect(MATCH_ROSTER_MAX).toBe(60);
+    expect(cappedRoster([entry('a'), entry('b', 1), entry('c'), entry('d', 3)]).map((e) => e.id)).toEqual(['b', 'd', 'a', 'c']);
+    expect(cappedRoster(Array.from({ length: 61 }, (_, i) => entry(`x${i}`)))).toHaveLength(60);
   });
 
   it('PhoneCommandSchema takes crown, again and sendBack with a short string id, and nothing else', () => {
@@ -880,19 +880,19 @@ describe('protocol: phone commands and the ring', () => {
     ]) expect(PhoneCommandSchema.safeParse(c).success, JSON.stringify(c)).toBe(false);
   });
 
-  it('ringEntry keeps a good entry, drops a bad thumb, and refuses an entry that cannot be sent', () => {
+  it('rosterEntry keeps a good entry, drops a bad thumb, and refuses an entry that cannot be sent', () => {
     const one = { id: 'r1', name: 'Zib', maker: 'Zig', crowns: 0, thumb: 'data:image/jpeg;base64,AAAA' };
-    expect(ringEntry(one)).toEqual(one);
-    expect(ringEntry({ ...one, thumb: `data:image/jpeg;base64,${'A'.repeat(20_000)}` })).toEqual({ ...one, thumb: null });
-    expect(ringEntry({ ...one, thumb: 'data:image/png;base64,AAAA' })).toEqual({ ...one, thumb: null }); // JPEG only
-    expect(ringEntry({ ...one, id: 'x'.repeat(65) })).toBeNull();
-    expect(ringEntry({ ...one, crowns: -1 })).toBeNull();
-    expect(ringEntry(null)).toBeNull();
+    expect(rosterEntry(one)).toEqual(one);
+    expect(rosterEntry({ ...one, thumb: `data:image/jpeg;base64,${'A'.repeat(20_000)}` })).toEqual({ ...one, thumb: null });
+    expect(rosterEntry({ ...one, thumb: 'data:image/png;base64,AAAA' })).toEqual({ ...one, thumb: null }); // JPEG only
+    expect(rosterEntry({ ...one, id: 'x'.repeat(65) })).toBeNull();
+    expect(rosterEntry({ ...one, crowns: -1 })).toBeNull();
+    expect(rosterEntry(null)).toBeNull();
   });
 
-  it('HostSendSchema takes a ring and refuses a bad one', () => {
+  it('HostSendSchema takes a match and refuses a bad one', () => {
     const one = { id: 'r1', name: 'Zib', maker: 'Zig', crowns: 0, thumb: 'data:image/jpeg;base64,AAAA' };
-    const ok = { type: 'ring', phase: 'open', fighting: 1, roster: [one] };
+    const ok = { type: 'match', phase: 'open', fighting: 1, roster: [one] };
     expect(HostSendSchema.safeParse(ok).success).toBe(true);
     expect(HostSendSchema.safeParse({ ...ok, roster: [{ ...one, thumb: null }] }).success).toBe(true);
     expect(HostSendSchema.safeParse({ ...ok, phase: 'paused' }).success).toBe(false);

@@ -1,7 +1,9 @@
 import { describe, expect, it, test } from 'vitest';
 import { packRegions } from '../../src/skin/patterns';
-import { Mesh } from 'three/webgpu';
-import { createToonMaterial, GLOW_KEY, setGlow, TOON_BANDS, toonBand, toonGradient } from '../../src/render/toon';
+import { Color, Mesh } from 'three/webgpu';
+import {
+  createToonMaterial, GLOW_KEY, HEAT_FROM, HEAT_KEY, setGlow, setTint, TOON_BANDS, toonBand, toonGradient, WARM_KEY, WARM_MAX, warmSkin,
+} from '../../src/render/toon';
 import { loadFixture } from '../fixtures/fighters';
 
 describe('toonBand', () => {
@@ -66,5 +68,45 @@ describe("a special's glow", () => {
     expect(mesh.userData[GLOW_KEY]).toBe(0);
     expect(m.emissiveNode).toBe(before);
     expect(m.version).toBe(version); // no recompile
+  });
+});
+
+
+/** A colour's hue (0 … 1) and how far two hues are apart round the wheel (0 … 0.5). */
+const hueOf = (c: Color) => c.getHSL({ h: 0, s: 0, l: 0 }).h;
+const hueGap = (a: number, b: number) => Math.min(Math.abs(a - b), 1 - Math.abs(a - b));
+
+describe('the damage look on the skin', () => {
+  it('is kept on the object (clamped), never in the skin\'s own `tint` (its species colour shift), and never recompiles', () => {
+    const r = loadFixture('fists');
+    const m = createToonMaterial(packRegions(r, r.skin.regions.map((x) => x.id)));
+    const mesh = new Mesh(undefined, m);
+    const version = m.version;
+    setTint(mesh, 0.2, 0.5);
+    expect(mesh.userData[WARM_KEY]).toBe(0.2);
+    expect(mesh.userData[HEAT_KEY]).toBe(0.5);
+    setTint(mesh, 2, 3);
+    expect(mesh.userData[WARM_KEY]).toBe(WARM_MAX);
+    expect(mesh.userData[HEAT_KEY]).toBe(1);
+    setTint(mesh, Number.NaN, -1);
+    expect(mesh.userData[WARM_KEY]).toBe(0);
+    expect(mesh.userData[HEAT_KEY]).toBe(0);
+    expect(mesh.userData.tint).toBeUndefined(); // a number there turned every body black
+    expect([WARM_KEY, HEAT_KEY]).not.toContain('tint');
+    expect(m.version).toBe(version);
+  });
+
+  it('keeps the creature\'s own colours: even fully warmed, cyan stays cyan, green green, pink pink (kids find theirs by colour)', () => {
+    expect(WARM_MAX).toBeLessThanOrEqual(0.3);
+    // the red band of the heat stays at the silhouette: the body's middle (facing the camera within ~45°) is never painted
+    expect(HEAT_FROM).toBeGreaterThanOrEqual(1 - Math.cos(Math.PI / 4));
+    for (const hex of ['#3ec7e0', '#3fbf5f', '#ff7eb6', '#4da6ff', '#f28c28', '#8e5bd6']) {
+      const c = new Color(hex), w = warmSkin(c, WARM_MAX);
+      expect(hueGap(hueOf(c), hueOf(w)), hex).toBeLessThan(12 / 360);
+      // no channel moves by more than a third of itself: the same colour, a little warmer
+      for (const k of ['r', 'g', 'b'] as const) expect(Math.abs(w[k] - c[k]), `${hex} ${k}`).toBeLessThanOrEqual(c[k] / 3 + 1e-9);
+      expect(w.r).toBeCloseTo(c.r, 9); // warmer: red is untouched, green and blue a little less
+    }
+    expect(warmSkin(new Color('#3ec7e0'), 5).equals(warmSkin(new Color('#3ec7e0'), WARM_MAX))).toBe(true);
   });
 });

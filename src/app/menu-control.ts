@@ -18,8 +18,10 @@ export type MenuDeps = {
 };
 
 /**
- * The pause menu's wiring: Start or Esc opens and closes it, and while it is open it takes every controller press (B goes
- * back inside it). `press` takes the controller's presses first (true when it used one).
+ * The pause menu's wiring: Start (the keyboard's N) or Esc opens and closes it, and while it is open it takes every
+ * controller press it is given (B goes back inside it). `press` takes the presses first (true when it used one). On the
+ * TV a free controller's A and Start pick a creature to steer instead and its Select opens the menu (the Rumble keeps
+ * them from here while the menu is shut: `routePress`), and a controller that is playing never reaches the menu at all.
  */
 export function menuControl(d: MenuDeps) {
   let menu: Menu | null = null;

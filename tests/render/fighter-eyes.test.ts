@@ -6,7 +6,7 @@ import { builtBody } from '../fixtures/built';
 import { bodySdf } from '../../src/builder/sdf';
 import { buildSkeleton } from '../../src/builder/skeleton';
 import { planFor } from '../../src/fight/moves';
-import { ragdollLayout } from '../../src/physics/layout';
+import { bodyLayout } from '../../src/anim/layout';
 import { createFighterObject } from '../../src/render/fighter-object';
 import { eyePlaces } from '../../src/skin/eyes';
 import { KINDS, loadFixture } from '../fixtures/fighters';
@@ -15,7 +15,7 @@ describe('googly eyes on every fighter fixture', () => {
   test.each(KINDS)('%s: each eye sits on or outside the body, in the open, on the side it faces', (k) => {
     const recipe = loadFixture(k);
     const body = builtBody(recipe, [2]);
-    const layout = ragdollLayout(body.skeleton, planFor(recipe, body.skeleton));
+    const layout = bodyLayout(body.skeleton, planFor(recipe, body.skeleton));
     const f = createFighterObject(body, recipe, layout);
     // the body's true shape (bones and anatomy at the builder's fine detail), in creature space
     const sk = buildSkeleton(recipe);
@@ -46,7 +46,7 @@ describe('googly eyes on every fighter fixture', () => {
   test('an eye already in the open is left where the face put it', () => {
     const recipe = loadFixture('legs');
     const body = builtBody(recipe, [2]);
-    const layout = ragdollLayout(body.skeleton, planFor(recipe, body.skeleton));
+    const layout = bodyLayout(body.skeleton, planFor(recipe, body.skeleton));
     const f = createFighterObject(body, recipe, layout);
     f.root.updateMatrixWorld(true);
     eyePlaces(body, recipe.skin.eyes.size).forEach((p, i) => {

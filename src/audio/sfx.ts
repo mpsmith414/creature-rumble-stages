@@ -34,11 +34,11 @@ export interface Sfx {
   fanfare(): void;
   /** One big drum hit: a special winding up. */
   drum(): void;
-  /** A spring pad firing: a rising, wobbling spring. */
+  /** A present opening: a rising, wobbling spring. */
   sproing(): void;
-  /** A pinball post kicking a fighter away: a bright bell. */
+  /** A present dropping from the sky: a bright bell. */
   ding(): void;
-  /** A ring event starting: a party air horn. */
+  /** A level's mischief starting: a party air horn. */
   airhorn(): void;
 }
 

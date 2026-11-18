@@ -1,6 +1,7 @@
-import { DataTexture, MeshToonNodeMaterial, NearestFilter, RedFormat, type Node, type Object3D } from 'three/webgpu';
+import { Color, DataTexture, MeshToonNodeMaterial, NearestFilter, RedFormat, type Node, type Object3D } from 'three/webgpu';
 import { float, mix, normalView, positionViewDirection, smoothstep, uniform, vec3 } from 'three/tsl';
 import { markedColor, regionNodes } from '../skin/material';
+import { untone } from './tone';
 import type { RegionPack } from '../skin/patterns';
 
 /**
@@ -54,6 +55,43 @@ export function setGlow(mesh: Object3D, level: number): void {
 }
 
 /**
+ * Where a fighter's body mesh keeps its damage look (`userData`): `warm`, how far its skin is warmed (0 … WARM_MAX),
+ * and `heat`, how strongly a red glow rims its silhouette (0 … 1). Not `tint`: the skin's region colours already read
+ * `userData.tint` (a species' colour shift, `skin/material.ts`).
+ */
+export const WARM_KEY = 'damageWarm', HEAT_KEY = 'damageHeat';
+/**
+ * The warming is a multiply that keeps the creature's own colours (kids find their creature by its colours): at full
+ * warmth the skin's green and blue are × these, red untouched, so a cyan creature stays cyan, a little warmer. It never
+ * goes past WARM_MAX. The danger is carried by the red rim (`heat`), sweat, steam and spinning eyes, not by repainting.
+ */
+export const WARM_MUL = [1, 0.7, 0.62] as const, WARM_MAX = 0.3;
+/**
+ * The heat's red band round the silhouette: its colour (through the tone map's inverse); where it starts and is full
+ * (1 − N·V: 0 facing the camera … 1 at the edge), so the middle of the body is never touched; how much of the band's
+ * skin it paints red and how brightly it glows (× the heat).
+ */
+export const HEAT_COLOUR = '#ff2a14';
+export const HEAT_FROM = 0.3, HEAT_TO = 0.75;
+const HEAT_PAINT = 0.9, HEAT_RIM = 0.5;
+const HEAT_LIGHT = untone(HEAT_COLOUR);
+
+/**
+ * Sets a fighter's damage look: the skin warmed by `warm` (0 … WARM_MAX) and a red glow round its silhouette at `heat`
+ * (0 … 1), both clamped. Like the glow, read per object as it is drawn, so the shader is never rebuilt.
+ */
+export function setTint(mesh: Object3D, warm: number, heat: number): void {
+  mesh.userData[WARM_KEY] = Number.isFinite(warm) ? Math.min(WARM_MAX, Math.max(0, warm)) : 0;
+  mesh.userData[HEAT_KEY] = Number.isFinite(heat) ? Math.min(1, Math.max(0, heat)) : 0;
+}
+
+/** The CPU twin of the warming the shader does: `c` (linear) warmed by `warm` (clamped as `setTint` does), into `out`. */
+export function warmSkin(c: Color, warm: number, out = new Color()): Color {
+  const w = Number.isFinite(warm) ? Math.min(WARM_MAX, Math.max(0, warm)) : 0;
+  return out.setRGB(c.r * (1 - w * (1 - WARM_MUL[0])), c.g * (1 - w * (1 - WARM_MUL[1])), c.b * (1 - w * (1 - WARM_MUL[2])));
+}
+
+/**
  * A fighter's cartoon skin: the region colours, patterns and face marks (the valley's `regionNodes`, unchanged), lit in
  * three hard bands (`TOON_BANDS`) by three's toon lighting, plus a soft rim of light round the silhouette. No relief
  * (bump), no cavity darkening, no fur. Equal packs give equal shader code (named uniforms), so they share a pipeline.
@@ -63,13 +101,21 @@ export function createToonMaterial(pack: RegionPack): ToonMaterial {
   const col = markedColor(r);
   const m = new MeshToonNodeMaterial() as ToonMaterial;
   m.gradientMap = toonGradient();
-  m.colorNode = col;
+  // the damage look, read per object as it is drawn (`setTint`): the skin warmed (a multiply that keeps its colours)…
+  const warm = uniform(0).onObjectUpdate(({ object }) => (object?.userData[WARM_KEY] as number | undefined) ?? 0);
+  const heat = uniform(0).onObjectUpdate(({ object }) => (object?.userData[HEAT_KEY] as number | undefined) ?? 0);
+  const keep = vec3(1, 1, 1).sub(vec3(1 - WARM_MUL[0], 1 - WARM_MUL[1], 1 - WARM_MUL[2]).mul(warm));
+  const skin = col.mul(keep);
   const edge = float(1).sub(normalView.dot(positionViewDirection).clamp(0, 1));
+  // …and a red band round the silhouette only, painted and glowing (the middle of the body keeps its own colours)
+  const red = vec3(HEAT_LIGHT.r, HEAT_LIGHT.g, HEAT_LIGHT.b);
+  const band = smoothstep(HEAT_FROM, HEAT_TO, edge).mul(heat);
+  m.colorNode = mix(skin, red, band.mul(HEAT_PAINT));
   const rim = smoothstep(RIM_FROM, 1, edge).mul(RIM_STRENGTH);
   // the glow level is read per object as it is drawn (`setGlow`), so changing it never recompiles the shader
   const glow = uniform(0).onObjectUpdate(({ object }) => (object?.userData[GLOW_KEY] as number | undefined) ?? 0);
   const glowShape = smoothstep(GLOW_RIM_FROM, 1, edge).mul(GLOW_RIM).add(GLOW_BODY);
   const glowLight = mix(col, vec3(1, 1, 1), GLOW_WHITE).mul(glowShape).mul(glow);
-  m.emissiveNode = mix(col, vec3(1, 1, 1), RIM_WHITE).mul(rim).add(glowLight);
+  m.emissiveNode = mix(skin, vec3(1, 1, 1), RIM_WHITE).mul(rim).add(glowLight).add(red.mul(band.mul(HEAT_RIM)));
   return m;
 }

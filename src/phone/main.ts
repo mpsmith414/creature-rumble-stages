@@ -5,12 +5,12 @@ import { clear } from '../shared/dom';
 import { connect, storedSession } from './client';
 import { encodeImage } from './image';
 import { openPad, PadModel } from './pad';
-import { screen, type Handlers, type RingUi, type View } from './screens';
-import { draftSpent, initial, reduce, ringButtons, type Action, type Finished, type PhoneState } from './state';
+import { screen, type Handlers, type MatchUi, type View } from './screens';
+import { draftSpent, initial, reduce, matchButtons, type Action, type Finished, type PhoneState } from './state';
 import './phone.css';
 
 /** The phone page: the reducer's state on screen, the relay client, the draft kept on the phone (spec §2), and the
- * ring's Fighters tab (crown, again, send back in). Storage keys keep their old `valley-phone` names so nothing is lost. */
+ * match's Fighters tab (crown, again, send back in). Storage keys keep their old `valley-phone` names so nothing is lost. */
 
 const app = document.getElementById('app')!;
 const SESSION = 'valley-phone';
@@ -53,7 +53,7 @@ const pad = new PadModel();
 /** What only the screen needs (a waiting button, a friendly line); reset whenever the screen changes. */
 let ui: Pick<View, 'hint' | 'busy' | 'tweaking'> = {};
 /** The Fighters tab's own waits and line: they outlive the making screens' changes (and those outlive a tab switch). */
-let ringUi: RingUi = {};
+let matchUi: MatchUi = {};
 let shown: PhoneState['screen'] | null = null;
 let shownTab: PhoneState['tab'] = undefined;
 /** A Crown hold is on: a redraw would drop it, so redraws wait until it ends. */
@@ -65,7 +65,7 @@ function render() {
   if (state.screen !== shown) { ui = {}; shown = state.screen; window.scrollTo(0, 0); }
   if (state.tab !== shownTab) { shownTab = state.tab; window.scrollTo(0, 0); }
   const thumb = image ? `data:${image.mediaType};base64,${image.base64}` : null;
-  clear(app).append(screen({ state, thumb, needCode: !urlCode, ...ui, ringUi }, handlers));
+  clear(app).append(screen({ state, thumb, needCode: !urlCode, ...ui, matchUi }, handlers));
 }
 function dispatch(a: Action) {
   const was = state.seen;
@@ -91,17 +91,17 @@ function clearDraft() {
   saveDraft();
 }
 
-/** The ring's news: no screen changes, so the making screens are left alone (a redraw would drop the keyboard) unless
+/** The match news: no screen changes, so the making screens are left alone (a redraw would drop the keyboard) unless
  * the Fighters tab shows or its Again! dot comes or goes. A new phase ends a Crown / Again wait. */
-function onRing(m: Extract<PhoneMsg, { type: 'ring' }>) {
-  const dotWas = ringButtons(state).again;
-  if (state.ring?.phase !== m.phase) ringUi = { ...ringUi, asked: undefined, hint: undefined };
+function onMatchNews(m: Extract<PhoneMsg, { type: 'match' }>) {
+  const dotWas = matchButtons(state).again;
+  if (state.match?.phase !== m.phase) matchUi = { ...matchUi, asked: undefined, hint: undefined };
   state = reduce(state, m);
-  if (state.tab === 'fighters' || ringButtons(state).again !== dotWas) render();
+  if (state.tab === 'fighters' || matchButtons(state).again !== dotWas) render();
 }
 
 function onMsg(m: PhoneMsg) {
-  if (m.type === 'ring') return onRing(m);
+  if (m.type === 'match') return onMatchNews(m);
   if (draftSpent(reduce(state, { type: 'msg', msg: m }), sent)) clearDraft();
   // Every message ends a wait on the TV ("Changing it…", a busy button): after a lock or a blip the answer itself may
   // have been missed, and the rejoin's hello says where things really are.
@@ -139,25 +139,25 @@ async function join(name: string, badge: string, typed: string) {
 /** What a refused action tells the kid ('unknown' needs nothing: the client already asked for a rescan). */
 const refusal = (r: string) =>
   r === 'offline' ? OFFLINE : r === 'limit' ? 'That was the last change for this one.' : r === 'unknown' ? undefined : "Hmm, that didn't work. Try again!";
-/** The same for a ring command. */
-const ringRefusal = (r: string) =>
+/** The same for a match command. */
+const matchRefusal = (r: string) =>
   r === 'slow' ? 'Whoa, one at a time!' : r === 'noHost' ? 'Open Rumble on the TV first' : refusal(r);
-const setRing = (patch: RingUi) => { ringUi = { ...ringUi, ...patch }; render(); };
+const setMatchUi = (patch: MatchUi) => { matchUi = { ...matchUi, ...patch }; render(); };
 
-/** Crown or Again: the button waits until the TV's ring changes phase (or, if the TV had nothing to do, a few seconds). */
+/** Crown or Again: the button waits until the TV's match changes phase (or, if the TV had nothing to do, a few seconds). */
 async function ask(kind: 'crown' | 'again') {
-  setRing({ asked: kind, hint: undefined });
+  setMatchUi({ asked: kind, hint: undefined });
   const r = await client.command({ kind } satisfies PhoneCommand);
-  if (r !== 'sent') return setRing({ asked: undefined, hint: ringRefusal(r) });
-  setTimeout(() => { if (ringUi.asked === kind) setRing({ asked: undefined }); }, 5000);
+  if (r !== 'sent') return setMatchUi({ asked: undefined, hint: matchRefusal(r) });
+  setTimeout(() => { if (matchUi.asked === kind) setMatchUi({ asked: undefined }); }, 5000);
 }
 
 /** A roster creature goes back in: its button says "On its way!" for a moment. */
 async function sendBack(id: string) {
-  const drop = () => setRing({ sentBack: (ringUi.sentBack ?? []).filter((x) => x !== id) });
-  setRing({ sentBack: [...(ringUi.sentBack ?? []), id], hint: undefined });
+  const drop = () => setMatchUi({ sentBack: (matchUi.sentBack ?? []).filter((x) => x !== id) });
+  setMatchUi({ sentBack: [...(matchUi.sentBack ?? []), id], hint: undefined });
   const r = await client.command({ kind: 'sendBack', id });
-  if (r !== 'sent') { drop(); return setRing({ hint: ringRefusal(r) }); }
+  if (r !== 'sent') { drop(); return setMatchUi({ hint: matchRefusal(r) }); }
   setTimeout(drop, 4000);
 }
 
@@ -208,7 +208,7 @@ const handlers: Handlers = {
   again: () => dispatch({ type: 'again' }),
   tab: (t) => dispatch({ type: 'tab', tab: t }),
   crown: () => void ask('crown'),
-  ringAgain: () => void ask('again'),
+  matchAgain: () => void ask('again'),
   sendBack: (id) => void sendBack(id),
   holding(on) {
     holding = on;

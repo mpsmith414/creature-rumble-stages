@@ -30,12 +30,46 @@ describe('LINES', () => {
     }
   });
 
-  it('every ring event line names the event, shouted (each event has every line: at least 5 each)', () => {
-    expect(LINES.ringEvent.length).toBeGreaterThanOrEqual(5);
-    for (const l of LINES.ringEvent) {
+  it('has the stage beats, and none of the ring ones', () => {
+    for (const beat of ['present', 'aboutToFly', 'levelEvent', 'knockOut', 'holdsStage']) expect(Object.keys(LINES), beat).toContain(beat);
+    for (const beat of ['ringEvent', 'ringOut', 'holdsRing']) expect(Object.keys(LINES), beat).not.toContain(beat);
+  });
+
+  it('every level mischief line names the mischief, shouted (each mischief has every line: at least 5 each)', () => {
+    expect(LINES.levelEvent.length).toBeGreaterThanOrEqual(5);
+    for (const l of LINES.levelEvent) {
       expect(l, l).toContain('{event}');
-      expect(fillSlots(l, { event: 'Moon Jump' })).toContain('MOON JUMP');
+      expect(fillSlots(l, { event: 'Swinging Vines' })).toContain('SWINGING VINES');
     }
+  });
+
+  it('a present from the sky: most lines tease what is inside, shouted', () => {
+    const named = LINES.present.filter((l) => l.includes('{event}'));
+    expect(named.length).toBeGreaterThanOrEqual(LINES.present.length / 2);
+    for (const l of named) expect(fillSlots(l, { event: 'Custard Pie' })).toContain('CUSTARD PIE');
+    for (const l of LINES.present) expect(l, l).toMatch(/present|gift|box|parcel|delivery/i);
+  });
+
+  it('the warnings and the knockouts name who they are about', () => {
+    for (const l of LINES.aboutToFly) expect(l, l).toContain('{name}');
+    for (const l of LINES.knockOut) expect(l, l).toContain('{other}');
+    for (const l of LINES.holdsStage) expect(l, l).toContain('{name}');
+  });
+
+  it('a knockout line fits every level (it is said on all of them: no river splash, no space)', () => {
+    for (const l of LINES.knockOut) expect(l, l).not.toMatch(/\b(splash\w*|swim\w*|river|water|space)\b/i);
+  });
+
+  it('the warnings fit the look (a red glow, sweat, steam, spinning eyes) and read for one name or several', () => {
+    for (const l of LINES.aboutToFly) {
+      expect(l, l).not.toMatch(/\b(is|was|has)\b/i); // "{name} is…" would not read for "PIP AND ZED"
+      expect(l, l).not.toMatch(/teapot|deep red|turning red/i);
+    }
+  });
+
+  it('no ring words: the fight is on a stage now', () => {
+    const ring = /\b(ring|rope|ropes|ball pit|bumper)\b/i;
+    for (const bank of Object.values(LINES)) for (const l of bank) expect(l).not.toMatch(ring);
   });
 
   it('every throw line names the thrower or the thrown, most both', () => {

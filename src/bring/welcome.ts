@@ -7,7 +7,7 @@ export const TITLE_MS = 4700;
 
 let shown: HTMLElement | null = null;
 
-/** Show `text` over the ring in the upper third (the join card is hidden while an arrival is on, Ruling R21); one at a time. */
+/** Show `text` over the level in the upper third (the join card is hidden while an arrival is on, Ruling R21); one at a time. */
 export function showTitle(root: HTMLElement, text: string, ms = TITLE_MS): HTMLElement {
   shown?.remove();
   const el = (shown = h('div', { class: 'arrive-title', role: 'status' }, text));
