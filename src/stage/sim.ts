@@ -283,7 +283,7 @@ export class StageSim {
       const angle = a.throwDir === 'up' ? THROW_UP_ANGLE : THROW_ANGLE;
       // (a grown holder throws harder)
       const power = THROW_POWER * a.powerShare();
-      const launch = b.takeHit({ power, damage: THROW_DAMAGE, angle, from: a.facing });
+      const launch = b.takeHit({ power, damage: THROW_DAMAGE, angle, from: a.facing, byKid: a.kid });
       if (launch <= 0) {
         // a Bubble Shield stopped the throw: a let-go, the held one drops free now (ruling R36)
         a.throwStopped(b);
@@ -358,7 +358,7 @@ export class StageSim {
         a.attackHits.add(b.id);
         // Along the facing, or away from the body for a blow all around it (as StageFighter.pushToward).
         const from = s.around && p.x !== s.ax ? (p.x > s.ax ? 1 : -1) : s.facing;
-        const launch = b.takeHit({ power: s.power, damage: s.damage, angle: s.angle, from });
+        const launch = b.takeHit({ power: s.power, damage: s.damage, angle: s.angle, from, byKid: a.kid });
         if (launch <= 0) continue;
         const at = { x: nx, y: ny };
         a.freeze = this.tune.hitFreeze;

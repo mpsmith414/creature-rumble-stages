@@ -78,7 +78,7 @@ const PRESENT_AT = 4;
 const DAMAGE_KEY = 50;
 const LOOKS: readonly number[] = [0, ...STAGE_TUNE.damageSteps];
 /** The help line. */
-const HELP = 'You are 1 (the AI plays it until you touch the keys or the pad; 10 s idle gives it back) · move ← → or A D (↑ ↓ / W S aim) · Space jump · J attack · K special · H grab · ; item · Shift dodge'
+const HELP = 'You are 1 (the AI plays it until you touch the keys or the pad; 10 s idle gives it back; you have kid power while you steer) · move ← → or A D (↑ ↓ / W S aim) · Space jump · J attack · K special · H grab · ; item · Shift dodge'
   + '  —  pad: stick, A jump, X attack, Y special, B grab, RB item, LB or RT dodge  —  1–7 add a creature · F fill to four · M fill every special meter · G +50 damage to all · P present now · I give 1 the next power-up · L next level · N mischief now · R reset';
 
 /** The keys that steer fighter 1 (by their place on the keyboard): touching one hands it to you. */
@@ -225,6 +225,7 @@ export async function showStage(canvas: HTMLCanvasElement, ui: HTMLElement,
     const rng = mulberry32(seed);
     sim = new StageSim({ level, rng, items: true });
     loop = new StageLoop({ sim, rng });
+    loop.kidPower = true; // you have kid power while you steer (as a child with a controller on the TV)
     moments = new Moments({ fighter: (id) => sim.get(id), level: () => sim.level, t: () => sim.t });
     calls = new StageCalls((id) => nameOf(id));
     next = 2;

@@ -25,7 +25,7 @@ import { padColour, PadSeats, routePress, type SeatEvent } from './pad-seats';
 import { CreaturePictures, DrawAhead } from './pictures';
 import { RumbleShow, type Card } from './show';
 import { STAGE_FOV, StageShow } from './stage-show';
-import { handleCommand, joinKey, keepMade, MatchBroadcast, sendBack, startHint } from './wiring';
+import { handleCommand, joinKey, keepMade, kidPowerSwitch, MatchBroadcast, sendBack, startHint } from './wiring';
 
 /** What the Rumble hands back (the dev panel and its shots drive it through this). */
 export type RumbleApi = {
@@ -97,6 +97,9 @@ export async function startRumble(core: Core): Promise<RumbleApi> {
     },
   };
   const show = new RumbleShow({ view, rng: Math.random, match, announcer, sfx, crowd, roster: showRoster, banner });
+  // Kid power (the TV menu's switch, remembered across nights; on unless a grown-up turned it off)
+  const kidPower = kidPowerSwitch({ stored, remember });
+  show.kidPower = kidPower.on;
 
   // ---------- the phones: the fight on every phone, their commands, their creatures ----------
   const broadcast = new MatchBroadcast({
@@ -172,7 +175,7 @@ export async function startRumble(core: Core): Promise<RumbleApi> {
   };
   applyVolume();
   const menuState = (): MenuState => ({
-    phase: match.phase, fighting: match.fighting.length, joinShown: bring.cardShown, level: show.levelId, ...vol,
+    phase: match.phase, fighting: match.fighting.length, joinShown: bring.cardShown, kidPower: kidPower.on, level: show.levelId, ...vol,
   });
   const fighters = async (): Promise<FighterRow[]> =>
     (await roster.summaries()).map((s) => ({ ...s, inFight: show.known(s.id) }));
@@ -190,6 +193,10 @@ export async function startRumble(core: Core): Promise<RumbleApi> {
       sendBack: (id) => void sendBackIn(id).catch((e) => console.warn('send back failed', e)),
       join: () => {
         bring.toggle();
+        refreshMenu();
+      },
+      kidPower: () => {
+        show.kidPower = kidPower.toggle();
         refreshMenu();
       },
       volume: (d) => {

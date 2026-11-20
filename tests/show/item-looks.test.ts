@@ -1,4 +1,4 @@
-import { Group, InstancedMesh, Matrix4, Mesh, Vector3 } from 'three/webgpu';
+import { Color, Group, InstancedMesh, Matrix4, Mesh, Vector3 } from 'three/webgpu';
 import { describe, expect, test } from 'vitest';
 import { animState, poseSegments } from '../../src/anim/pose';
 import { BEHIND, handSpot, holdPiece, ItemLooks, type ItemFighter } from '../../src/show/item-looks';
@@ -81,6 +81,42 @@ describe('item looks', () => {
     looks.update([], [], [creature('fists', 'bubbleShield')], [], 1 / 60);
     const [bubble] = shown(looks.root, 'bubble');
     expect(bubble.position.z).toBeLessThan(0);
+  });
+
+  test('kid power: a soft glow and twinkles in the pad’s colour behind the creature (never in front); none without it', () => {
+    const looks = new ItemLooks(new Group());
+    const kid = { ...creature('fists', null), kid: '#3ec7ff' };
+    /** The instances of InstancedMesh `name` drawn (more than a speck): spot and colour. */
+    const drawn = (name: string) => {
+      const im = looks.root.children.find((o): o is InstancedMesh => o instanceof InstancedMesh && o.name === name)!;
+      const out: { at: Vector3; colour: Color }[] = [], m = new Matrix4(), sc = new Vector3();
+      for (let i = 0; i < im.count; i++) {
+        im.getMatrixAt(i, m);
+        sc.setFromMatrixScale(m);
+        if (sc.x <= 1e-3) continue;
+        const colour = new Color();
+        im.getColorAt(i, colour);
+        out.push({ at: new Vector3().setFromMatrixPosition(m), colour });
+      }
+      return out;
+    };
+    looks.update([], [], [kid], [], 1 / 60);
+    const glow = drawn('kid-glow');
+    expect(glow).toHaveLength(1);
+    expect(glow[0].at.x).toBeCloseTo(kid.x, 6);
+    expect(glow[0].at.y).toBeCloseTo(kid.y + kid.h / 2, 6);
+    // the pad's colour as the TV shows it (blue: more blue than red)
+    expect(glow[0].colour.b).toBeGreaterThan(glow[0].colour.r);
+    const twinkles = drawn('kid-sparkles');
+    expect(twinkles.length).toBeGreaterThan(1);
+    for (const g of [...glow, ...twinkles]) expect(g.at.z).toBeLessThan(0);
+    // a timed power-up's sparkle still shows beside it
+    looks.update([], [], [{ ...kid, item: 'zoomSneakers', left: 8 }], [], 1 / 60);
+    expect(sparkles(looks.root).length).toBeGreaterThan(3);
+    expect(drawn('kid-glow')).toHaveLength(1);
+    looks.update([], [], [creature('fists', null), { ...creature('blob', null), kid: null }], [], 1 / 60);
+    expect(drawn('kid-glow')).toHaveLength(0);
+    expect(drawn('kid-sparkles')).toHaveLength(0);
   });
 
   test('a pie flies; one that splats a creature leaves custard on its face for the stun, an ice pop shows a moment', () => {

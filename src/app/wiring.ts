@@ -61,6 +61,36 @@ export function joinKey(e: { key: string; repeat?: boolean; ctrlKey?: boolean; a
   return true;
 }
 
+// ---------- kid power ----------
+
+/** Where the TV remembers the menu's Kid power switch, across nights. */
+export const KID_POWER_KEY = 'rumble.kidPower';
+/** Kid power on a fresh TV: on (the owner: the children's creatures are the strong ones). */
+export const KID_POWER_DEFAULT = true;
+
+/**
+ * The TV menu's Kid power switch, read from the remembered settings (`stored`, else KID_POWER_DEFAULT; a broken value
+ * counts as the default) and remembering every toggle (`remember`).
+ */
+export function kidPowerSwitch(store: {
+  stored: <T>(key: string, fallback: T) => T;
+  remember: (key: string, v: unknown) => void;
+}) {
+  const was = store.stored<unknown>(KID_POWER_KEY, KID_POWER_DEFAULT);
+  let on = typeof was === 'boolean' ? was : KID_POWER_DEFAULT;
+  return {
+    get on() {
+      return on;
+    },
+    /** Turns it the other way and remembers that; returns whether it is on now. */
+    toggle(): boolean {
+      on = !on;
+      store.remember(KID_POWER_KEY, on);
+      return on;
+    },
+  };
+}
+
 /** The start screen's line under "ADD A CREATURE!": how to join, with the card showing, or how to show it when it is hidden. */
 export const startHint = (cardShown: boolean) =>
   cardShown ? 'Scan the code with a phone and draw a fighter' : 'Press J to show the code for phones';

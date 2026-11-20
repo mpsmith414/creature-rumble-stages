@@ -32,6 +32,11 @@ export class StageLoop {
    * stands). A steered one still follows its controller.
    */
   thinking = true;
+  /**
+   * Kid power (the TV menu's switch; off by default): each step, a fighter steered by a controller whose source answers
+   * gets kid power (`StageFighter.kid`, `KID_POWER`); one a brain drives (the pad resting included) never does.
+   */
+  kidPower = false;
 
   private readonly rng: Rng;
   private readonly brains: boolean;
@@ -115,7 +120,10 @@ export class StageLoop {
     return out;
   }
 
-  /** One fight step: remember everyone, gather the wanting (controllers first, else the brain), step the sim. */
+  /**
+   * One fight step: remember everyone, gather the wanting (controllers first, else the brain) and who has kid power
+   * (a controller's while the switch is on), step the sim.
+   */
   private step(): StageEvents {
     const sim = this.sim, fs = sim.fighters(), intents = this.intents, others = this.others;
     this.prevTime = sim.t;
@@ -124,6 +132,7 @@ export class StageLoop {
     for (const f of fs) {
       this.note(f);
       const want = this.sources.get(f.id)?.() ?? null;
+      f.kid = this.kidPower && want !== null;
       if (want) {
         intents.set(f.id, want);
         continue;

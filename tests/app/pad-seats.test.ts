@@ -262,6 +262,27 @@ describe('PadSeats on the stage: the same moves and rules as the AI, only the wa
     expect(ranLeft).toBe(true);
   });
 
+  test('kid power: a steered creature has it; a resting pad hands it to the AI without it; a touch brings it back', () => {
+    const { sim, loop, run } = twoPads();
+    loop.kidPower = true;
+    const a = sim.get('a')!, b = sim.get('b')!;
+    // pad 2 is held still: a stick past its rest but inside the dead zone (touched, so it never rests; b stands)
+    const held = pad({ lx: 0.18 });
+    run(2, pad(), held);
+    expect(a.kid).toBe(true);
+    expect(b.kid).toBe(true);
+    run(60 * (REST_AFTER + 1), pad(), held); // pad 1 put down and rests; pad 2 still held
+    expect(a.kid).toBe(false);
+    expect(b.kid).toBe(true);
+    run(2, pad({ lx: -1 }), held); // woken by a touch
+    expect(a.kid).toBe(true);
+    // the switch off: nobody has it
+    loop.kidPower = false;
+    run(1, pad({ lx: -1 }), held);
+    expect(a.kid).toBe(false);
+    expect(b.kid).toBe(false);
+  });
+
   test('the A that picked the creature does not make it jump', () => {
     const rng = mulberry32(3);
     const sim = new StageSim({ level: TEST_LEVEL, rng });

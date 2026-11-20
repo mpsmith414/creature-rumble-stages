@@ -83,8 +83,8 @@ export const HELD_ITEMS: ReadonlySet<ItemName> = new Set<ItemName>(['poolNoodle'
  */
 export type Present = { id: number; item: ItemName; x: number; y: number; on: string | null; dx: number; landT: number };
 
-/** A custard pie in flight: who threw it, its centre and speed. */
-export type Pie = { from: string; x: number; y: number; vx: number; vy: number };
+/** A custard pie in flight: who threw it, its centre and speed, and whether its thrower had kid power as it threw. */
+export type Pie = { from: string; x: number; y: number; vx: number; vy: number; kid?: boolean };
 
 /** Slack for "the time has come" (s) and for tops (m), far below a step. */
 const T_EPS = 1e-9, EPS = 1e-6;
@@ -240,7 +240,7 @@ export class ItemDrops {
     if (f.pieThrown) {
       f.pieThrown = false;
       const m = f.mover, at = { x: m.pos.x + f.facing * (m.w / 2 + PIE_HAND), y: m.pos.y + m.h * PIE_HIGH };
-      this.pies.push({ from: f.id, x: at.x, y: at.y, vx: f.facing * PIE.speed, vy: PIE.up });
+      this.pies.push({ from: f.id, x: at.x, y: at.y, vx: f.facing * PIE.speed, vy: PIE.up, kid: f.kid });
       f.itemCues.push({ phase: 'use', item: 'custardPie', id: f.id, at });
     }
     const it = f.item;
@@ -316,7 +316,7 @@ export class ItemDrops {
       let spent = false;
       for (const f of fs) {
         if (f.id === p.from || !touchesCircle(f, p.x, p.y, PIE.r)) continue;
-        const how = f.splat();
+        const how = f.splat(p.kid);
         if (how === 'missed') continue;
         this.splat(i--, p, how === 'splat' ? f.id : null);
         spent = true;

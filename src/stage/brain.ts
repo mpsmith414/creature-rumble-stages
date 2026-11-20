@@ -4,6 +4,7 @@ import type { BodyStats } from './body';
 import type { StageFighter } from './fighter';
 import { GRAB_AHEAD, GRAB_R, grabbable } from './grab';
 import { PIE, PIE_HAND, PIE_HIGH, type ItemDrops } from './items';
+import { KID_POWER } from './kid-power';
 import { platformsAt, type Level, type Platform } from './level';
 import type { LevelMischief, TrainBox } from './mischief';
 import type { MoveStats } from './move';
@@ -547,8 +548,8 @@ function feel(view: SimView, rng: Rng, memory: BrainMemory): void {
 
 /**
  * The foe it is after: the one it has until it is time to pick again (or that one leaves), then the best by distance,
- * damage, grudge and crowding, with a little chance in it. Sometimes it roams to a platform first. Kept current even
- * while it is off the level. Null when alone.
+ * damage, grudge and crowding, with a little chance in it; a kid-powered foe looks less tempting (KID_POWER.cpuFocus).
+ * Sometimes it roams to a platform first. Kept current even while it is off the level. Null when alone.
  */
 function pickTarget(view: SimView, rng: Rng, memory: BrainMemory): StageFighter | null {
   const me = view.self, p = me.mover.pos, t = view.t;
@@ -567,6 +568,8 @@ function pickTarget(view: SimView, rng: Rng, memory: BrainMemory): StageFighter 
     for (const g of view.others) {
       if (g !== o && g.action !== 'out' && Math.abs(g.mover.pos.x - q.x) < CROWD_NEAR && Math.abs(g.mover.pos.y - q.y) < CROWD_NEAR) score += CROWD_COST;
     }
+    // a child's creature looks KID_POWER.cpuFocus × as tempting: as far again (an extra-tempting one, below 0, less so)
+    if (o.kid) score = score >= 0 ? score / KID_POWER.cpuFocus : score * KID_POWER.cpuFocus;
     if (score < bestScore) {
       bestScore = score;
       best = o;

@@ -113,6 +113,8 @@ export class RumbleShow {
   private frozen = false;
   /** The creatures steered by a controller, each with its pad's wanting (kept across new fights and levels). */
   private readonly pads = new Map<string, () => Intent | null>();
+  /** The TV menu's Kid power switch (on unless a grown-up turns it off), told to every new fight's loop. */
+  private kid = true;
   /** While crowned: where the champion stands (x, m), which the others turn to as they stand about; null otherwise. */
   private faceX: number | null = null;
   /** Scratch, refilled every frame. */
@@ -160,6 +162,18 @@ export class RumbleShow {
       this.loop.steer(id, null);
     }
     this.applyPads();
+  }
+
+  /**
+   * Kid power (the TV menu's switch, on by default): a creature a child steers with a controller hits harder and is
+   * hard for the computer to knock about (`KID_POWER`). Kept through new fights, levels and Again!.
+   */
+  get kidPower(): boolean {
+    return this.kid;
+  }
+  set kidPower(on: boolean) {
+    this.kid = on;
+    this.loop.kidPower = on;
   }
 
   /** Is creature `id` steered by a controller? */
@@ -417,6 +431,7 @@ export class RumbleShow {
     const rng = mulberry32(Math.floor(this.d.rng() * 2 ** 32));
     this.sim = new StageSim({ level: this.level, rng, items: true });
     this.loop = new StageLoop({ sim: this.sim, rng });
+    this.loop.kidPower = this.kid;
     this.moments = new Moments({ fighter: (id) => this.sim.get(id), level: () => this.sim.level, t: () => this.sim.t });
     this.calls = new StageCalls((id) => this.name(id), this.d.rng);
   }

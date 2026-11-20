@@ -12,8 +12,9 @@ import { PIE, PRESENT_SIZE, type ItemCue, type ItemName, type Pie, type Present 
  * under a striped parachute (folded away once it lands); a held pool noodle or custard pie in the creature's hand; a pie
  * flying; a splat of custard on the face of a creature it hit while it is stunned; an ice pop in the hand a moment; a
  * sparkle round a creature in its own colour while a timed power-up lasts (blinking faster as it runs out); a bubble
- * behind a creature with a Bubble Shield. Presents, sparkles and bubbles sit behind the play plane (z < 0), never in
- * front of a creature; the things in a hand, a flying pie and a splat are small and part of the creature.
+ * behind a creature with a Bubble Shield; a soft glow with twinkles rising through it in its pad's colour behind a
+ * creature with kid power. Presents, sparkles, bubbles and glows sit behind the play plane (z < 0), never in front of
+ * a creature; the things in a hand, a flying pie and a splat are small and part of the creature.
  */
 
 /** What the looks need of one creature now: its power-up, its time left (s) of a timed one, its box as drawn, its colour and pose. */
@@ -34,6 +35,8 @@ export type ItemFighter = {
   layout: BodyLayout;
   /** Its pieces as posed this frame (one world matrix per segment, as `poseSegments` makes them). */
   pieces: readonly Matrix4[];
+  /** With kid power (a child steering it with a controller): its pad's colour (a CSS colour), the glow's; else none. */
+  kid?: string | null;
 };
 
 /** How far behind the play plane presents and bubbles (and sparkles) are drawn (m): behind every creature's body. */
@@ -60,11 +63,25 @@ const SPLAT_TIME = PIE.stun, ICE_POP_TIME = 1;
 /** The splat sits this far (m) out from the front of the head; it is drawn for a head of this radius (m), never below this share. */
 const SPLAT_OUT = 0.03, SPLAT_HEAD = 0.3, SPLAT_MIN = 0.8;
 
+/**
+ * Kid power's glow: an oval this far (m) out round the box, drawn this far behind the play plane (m, behind the
+ * presents and bubbles too), made of rings each this opaque (stacked, it is soft: brightest in the middle, faint at its
+ * rim), breathing ± this share this fast (rad/s).
+ */
+const KID_GLOW_OUT = 0.45, KID_GLOW_Z = -0.95, KID_GLOW_OPACITY = 0.3;
+const KID_GLOW_RINGS = [1, 0.86, 0.72, 0.58, 0.44] as const;
+const KID_GLOW_BREATHE = 0.06, KID_GLOW_SPEED = 3;
+/** Kid power's twinkles: this many rise through the glow, each taking this long (s) from bottom to top, this big (m). */
+const KID_TWINKLES = 5, KID_TWINKLE_RISE = 1.4, KID_TWINKLE_SIZE = 0.4;
+/** How far toward white the glow's colour (and, from there, the twinkles') is lightened (0 none … 1 white). */
+const KID_GLOW_LIGHT = 0.3, KID_TWINKLE_LIGHT = 0.4;
+
 /** The noodle never points further down than this (the y of its direction): held out level or up. */
 const NOODLE_UP = 0;
 
 const _p = new Vector3(), _q = new Quaternion(), _s = new Vector3(), _m = new Matrix4(), _v = new Vector3(), _d = new Vector3();
 const UP = new Vector3(0, 1, 0);
+const WHITE = new Color(1, 1, 1);
 const _hsl = { h: 0, s: 0, l: 0 };
 
 /** Which piece holds things (a hand, on the side nearer the camera), and how far out along it its end is, per layout. */
@@ -122,6 +139,9 @@ export class ItemLooks {
   private readonly bubbles: Mesh[] = [];
   private readonly flying: Mesh[] = [];
   private readonly sparkles: InstancedMesh;
+  /** Kid power's glows (one a creature) and the twinkles rising through them. */
+  private readonly glows: InstancedMesh;
+  private readonly twinkles: InstancedMesh;
   private readonly timers = new Map<string, Timers>();
   private readonly tint = new Color();
   private time = 0;
@@ -203,6 +223,21 @@ export class ItemLooks {
     this.sparkles = instanced(sparkGeo, flat, FIGHTERS * SPARKLES, 'sparkles');
     for (let i = 0; i < FIGHTERS * SPARKLES; i++) this.sparkles.setColorAt(i, this.tint.set('#ffffff'));
     this.root.add(this.sparkles);
+
+    // kid power: a soft glow (flat rings in plain white, each coloured its pad's) and twinkles rising through it
+    const soft = flatMaterial();
+    soft.transparent = true;
+    soft.opacity = KID_GLOW_OPACITY;
+    soft.depthWrite = false;
+    this.materials.push(soft);
+    const glowGeo = this.geo(geometryOf('flat', (b, s) => {
+      for (const r of KID_GLOW_RINGS) b.add(s.ball, at(0, 0, 0, r, r, 0.02), (_p, _n, out) => out.setRGB(1, 1, 1));
+    }));
+    this.glows = instanced(glowGeo, soft, FIGHTERS, 'kid-glow');
+    this.twinkles = instanced(sparkGeo, flat, FIGHTERS * KID_TWINKLES, 'kid-sparkles');
+    for (let i = 0; i < FIGHTERS; i++) this.glows.setColorAt(i, this.tint.set('#ffffff'));
+    for (let i = 0; i < FIGHTERS * KID_TWINKLES; i++) this.twinkles.setColorAt(i, this.tint.set('#ffffff'));
+    this.root.add(this.glows, this.twinkles);
     parent.add(this.root);
   }
 
@@ -244,7 +279,7 @@ export class ItemLooks {
       m.rotation.z = -Math.sign(p.vx) * this.time * 9;
     }
 
-    let n = 0;
+    let n = 0, g = 0, tw = 0;
     for (let i = 0; i < FIGHTERS; i++) {
       const f = fighters[i];
       const noodle = this.noodles[i], pie = this.held[i], pop = this.pops[i], splat = this.splats[i], bubble = this.bubbles[i];
@@ -304,11 +339,40 @@ export class ItemLooks {
           n++;
         }
       }
+      if (f.kid) {
+        this.kidGlow(f, f.kid, g++, tw);
+        tw += KID_TWINKLES;
+      }
     }
-    _m.compose(_p.set(0, 0, 0), _q.identity(), _s.set(0, 0, 0));
-    for (let i = n; i < FIGHTERS * SPARKLES; i++) this.sparkles.setMatrixAt(i, _m);
-    this.sparkles.instanceMatrix.needsUpdate = true;
-    if (this.sparkles.instanceColor) this.sparkles.instanceColor.needsUpdate = true;
+    hideFrom(this.sparkles, n);
+    hideFrom(this.glows, g);
+    hideFrom(this.twinkles, tw);
+  }
+
+  /**
+   * Kid power's look on `f`: glow `g` (an oval round its box, breathing) in `colour`, and twinkles
+   * from `tw` on rising through it, each growing then fading as it goes, a little brighter than the glow.
+   */
+  private kidGlow(f: ItemFighter, colour: string, g: number, tw: number): void {
+    // the pad's colour a little lighter, so it reads as light even on a dark trunk (as it is, not untoned: a glow is
+    // mostly see-through, and an untoned bold pink shows orange)
+    this.tint.set(colour).lerp(WHITE, KID_GLOW_LIGHT);
+    const breathe = 1 + KID_GLOW_BREATHE * Math.sin(this.time * KID_GLOW_SPEED);
+    const rx = (f.w / 2 + KID_GLOW_OUT) * breathe, ry = (f.h / 2 + KID_GLOW_OUT) * breathe, cy = f.y + f.h / 2;
+    _m.compose(_p.set(f.x, cy, KID_GLOW_Z), _q.identity(), _s.set(rx, ry, 1));
+    this.glows.setMatrixAt(g, _m);
+    this.glows.setColorAt(g, this.tint);
+    this.tint.lerp(WHITE, KID_TWINKLE_LIGHT);
+    for (let k = 0; k < KID_TWINKLES; k++) {
+      // each its own way up, spread round the glow; it grows in, then fades out near the top
+      const u = (this.time / KID_TWINKLE_RISE + k / KID_TWINKLES) % 1;
+      const side = Math.sin(k * 2.4 + 0.7);
+      const size = KID_TWINKLE_SIZE * Math.sin(u * Math.PI);
+      _p.set(f.x + side * rx * 0.8, cy + (u * 2 - 1) * ry * 0.9, SPARKLE_Z);
+      _m.compose(_p, _q.identity(), _s.set(size, size, size));
+      this.twinkles.setMatrixAt(tw + k, _m);
+      this.twinkles.setColorAt(tw + k, this.tint);
+    }
   }
 
   /** Forgets a creature that left (its splat and ice pop). */
@@ -320,6 +384,8 @@ export class ItemLooks {
     for (const g of this.geos) g.dispose();
     for (const m of this.materials) m.dispose();
     this.sparkles.dispose();
+    this.glows.dispose();
+    this.twinkles.dispose();
     this.root.removeFromParent();
   }
 
@@ -343,6 +409,14 @@ export class ItemLooks {
     this.root.add(mesh);
     return mesh;
   }
+}
+
+/** Hides instances `from` on of `im` (a speck at the origin) and marks it changed. */
+function hideFrom(im: InstancedMesh, from: number): void {
+  _m.compose(_p.set(0, 0, 0), _q.identity(), _s.set(0, 0, 0));
+  for (let i = from; i < im.count; i++) im.setMatrixAt(i, _m);
+  im.instanceMatrix.needsUpdate = true;
+  if (im.instanceColor) im.instanceColor.needsUpdate = true;
 }
 
 /** The head piece (the root when it has none). */

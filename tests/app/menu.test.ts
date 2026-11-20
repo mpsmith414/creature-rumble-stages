@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import { CLEAR_ASK, CLEAR_LABEL, CROWN_LABEL, FIGHTING_NOW, LEVEL_TITLE, menuModel, PICK_BACK, PICK_IN, PICK_NONE, PICK_PICK, PICK_SEND, PICK_TITLE, pickerChoices, pickerMove, withPictures, type MenuState } from '../../src/app/menu';
+import { CLEAR_ASK, CLEAR_LABEL, CROWN_LABEL, FIGHTING_NOW, KID_POWER_OFF, KID_POWER_ON, LEVEL_TITLE, menuModel, PICK_BACK, PICK_IN, PICK_NONE, PICK_PICK, PICK_SEND, PICK_TITLE, pickerChoices, pickerMove, withPictures, type MenuState } from '../../src/app/menu';
 
-const base: MenuState = { phase: 'open', fighting: 0, joinShown: true, volume: 0.8, muted: false, level: 'jungle' };
+const base: MenuState = { phase: 'open', fighting: 0, joinShown: true, kidPower: true, volume: 0.8, muted: false, level: 'jungle' };
 const ids = (s: MenuState) => menuModel(s).flatMap((r) => r.items.map((i) => i.id));
 
 describe('the TV menu', () => {
@@ -15,8 +15,8 @@ describe('the TV menu', () => {
     expect(ids({ ...base, phase: 'crowned', fighting: 1 })).not.toContain('crown');
   });
 
-  test('always: Level, Fighters, Show join code, Sound, Clear the stage and back to the fight', () => {
-    expect(ids(base)).toEqual(['jungle', 'ship', 'toyroom', 'fighters', 'join', 'down', 'up', 'mute', 'clear', 'resume']);
+  test('always: Level, Fighters, Show join code, Kid power, Sound, Clear the stage and back to the fight', () => {
+    expect(ids(base)).toEqual(['jungle', 'ship', 'toyroom', 'fighters', 'join', 'kid', 'down', 'up', 'mute', 'clear', 'resume']);
     const labels = menuModel(base).flatMap((r) => r.items.map((i) => i.label));
     expect(labels).toEqual(expect.arrayContaining(['Fighters', 'Show join code', 'Clear the stage']));
   });
@@ -38,10 +38,12 @@ describe('the TV menu', () => {
     for (const w of words) expect(w).not.toMatch(/(ring|rope|ropes|bumper|ball pit)/i);
   });
 
-  test('the join code and the sound show their state; volume stops at its ends', () => {
+  test('the join code, kid power and the sound show their state; volume stops at its ends', () => {
     const row = (s: MenuState, id: string) => menuModel(s).find((r) => r.id === id)!;
     expect(row(base, 'join').items[0].selected).toBe(true);
     expect(row({ ...base, joinShown: false }, 'join').items[0].selected).toBe(false);
+    expect(row(base, 'kid').items[0]).toMatchObject({ label: KID_POWER_ON, selected: true });
+    expect(row({ ...base, kidPower: false }, 'kid').items[0]).toMatchObject({ label: KID_POWER_OFF, selected: false });
     expect(row(base, 'volume').level).toBe(8);
     expect(row({ ...base, volume: 0 }, 'volume').items[0].disabled).toBe(true);
     expect(row({ ...base, volume: 1 }, 'volume').items[1].disabled).toBe(true);

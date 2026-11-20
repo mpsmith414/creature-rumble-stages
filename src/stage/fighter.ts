@@ -7,6 +7,7 @@ import {
   GROW, GROW_EASE, grownStats, NOODLE, noodleSet, PIE, pieThrow, SHIELD_HITS, TIMED_ITEMS, ZOOM, zoomStats, type ItemCue,
   type ItemName,
 } from './items';
+import { KID_POWER, kidMoves, kidShare } from './kid-power';
 import { solidAt, type Level, type Platform } from './level';
 import { makeMover, stepMover, type MoveEvent, type MoveInput, type MoveStats, type Mover } from './move';
 import {
@@ -70,6 +71,12 @@ export class StageFighter {
   actionLen = 0;
   /** The special meter, 0…1: fills from hits landed and taken and from time; full, `special` lets the special go. */
   meter = 0;
+  /**
+   * Kid power (`KID_POWER`): a child is steering it with a controller (and the pad is not resting). Set by the app
+   * before every step, like the controller's wanting; off unless the app says so, so the computer's own bouts never
+   * see it.
+   */
+  kid = false;
   freeze = 0;
   /** While `frozen`, the action it was in (it carries on with it when the freeze ends; poses can hold it). */
   frozenFrom: Action = 'air';
@@ -199,7 +206,7 @@ export class StageFighter {
     this.actionT++;
     if (this.action === 'grab' && this.holding && this.actionT >= this.actionLen) this.startThrow('forward', this.facing);
     else if (this.actionLen > 0 && this.actionT >= this.actionLen) this.becomeFree();
-    if (this.action !== 'special') this.meter = Math.min(1, this.meter + METER_PER_S * DT);
+    if (this.action !== 'special') this.meter = Math.min(1, this.meter + METER_PER_S * DT * this.meterShare());
     // the custard pie leaves the hand at the top of the throw
     if (this.action === 'attack' && this.item === 'custardPie' && this.attack === pieThrow(this.stats) && this.actionT === PIE.windup) {
       this.item = null;
@@ -222,7 +229,8 @@ export class StageFighter {
     const inp = this.input;
     inp.mx = 0;
     inp.jump = inp.down = inp.recover = false;
-    let stats = this.stats.moves;
+    // (a kid's recovery leap is stronger: its own MoveStats object, never this body's changed)
+    let stats = this.kid ? kidMoves(this.stats.moves) : this.stats.moves;
     switch (this.action) {
       case 'idle': case 'run': case 'air': case 'land':
         inp.mx = intent.mx;
@@ -326,7 +334,7 @@ export class StageFighter {
    */
   landed(special: SpecialName | null, at: V2): void {
     if (special) this.specialImpact(at);
-    else this.meter = Math.min(1, this.meter + METER_LAND);
+    else this.meter = Math.min(1, this.meter + METER_LAND * this.meterShare());
   }
 
   /** The attack's hit circle in the world while it is active, else null (the same object every call; copy to keep). */
@@ -358,19 +366,20 @@ export class StageFighter {
    * the special goes on). A held (or thrown) one always tumbles, however slow the launch. A hit fills the meter (not in
    * a special) and lets go of a hold either way round. In a dodge's no-hit window, or out, nothing happens and it
    * returns 0; a Bubble Shield stops the hit (no damage, no launch) and it returns 0 too; else it returns the launch
-   * speed.
+   * speed. Kid power (`byKid`: the blow came from a kid-powered creature; mischief and the computer leave it off)
+   * scales the blow's power and damage (`kidShare`).
    */
-  takeHit(h: { power: number; damage: number; angle: number; from: 1 | -1 }): number {
+  takeHit(h: { power: number; damage: number; angle: number; from: 1 | -1; byKid?: boolean }): number {
     if (!this.canBeHit() || this.shieldBlocks()) return 0;
-    const tune = this.tune, m = this.mover;
-    this.damage += h.damage;
-    const launch = knockback(h.power, this.damage, this.stats.weight, tune);
+    const tune = this.tune, m = this.mover, k = kidShare(h.byKid ?? false, this.kid);
+    this.damage += h.damage * k.damage;
+    const launch = knockback(h.power * k.power, this.damage, this.stats.weight, tune);
     if (this.action === 'special') {
       if (launch < tune.specialArmour) {
         this.freeze = tune.hitFreeze;
         return launch;
       }
-    } else this.meter = Math.min(1, this.meter + METER_TAKEN);
+    } else this.meter = Math.min(1, this.meter + METER_TAKEN * this.meterShare());
     let vx = Math.cos(h.angle * DEG), vy = Math.sin(h.angle * DEG);
     if (m.ground !== null) {
       const lift = Math.sin(tune.groundLift * DEG);
@@ -516,13 +525,15 @@ export class StageFighter {
   /**
    * Hit by a custard pie: `splat`, stunned (a stagger of PIE.stun s, standing still) with a dab of damage; `blocked`,
    * its Bubble Shield stopped the pie (no stun, no custard); `missed`, it could not be hit or is held (the pie flies on).
+   * Kid power (`byKid`: a kid-powered creature threw it) scales the damage and the stun (`kidShare`).
    */
-  splat(): 'splat' | 'blocked' | 'missed' {
+  splat(byKid = false): 'splat' | 'blocked' | 'missed' {
     if (!this.canBeHit() || this.action === 'held') return 'missed';
     if (this.shieldBlocks()) return 'blocked';
-    this.damage += PIE.damage;
-    this.meter = Math.min(1, this.meter + METER_TAKEN);
-    this.begin('hitstun', Math.round(PIE.stun / DT));
+    const k = kidShare(byKid, this.kid);
+    this.damage += PIE.damage * k.damage;
+    this.meter = Math.min(1, this.meter + METER_TAKEN * this.meterShare());
+    this.begin('hitstun', Math.round((PIE.stun * k.stun) / DT));
     this.mover.vel.x = 0;
     if (this.mover.vel.y > 0) this.mover.vel.y = 0;
     return 'splat';
@@ -546,6 +557,11 @@ export class StageFighter {
   /** Its four attacks now: its body's (or grown body's), or Pool Noodle swings while the noodle has swings left. */
   attackSet(): Record<AttackDir, Attack> {
     return this.item === 'poolNoodle' && this.itemUses > 0 ? noodleSet(this.stats) : attackSet(this.stats);
+  }
+
+  /** How much faster its special meter fills than a body's: KID_POWER.meter × with kid power, else 1. */
+  meterShare(): number {
+    return this.kid ? KID_POWER.meter : 1;
   }
 
   /** How much harder than its body it hits now (Grow Juice, once grown: GROW.power). */

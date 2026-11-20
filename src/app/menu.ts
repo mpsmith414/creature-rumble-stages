@@ -12,9 +12,9 @@ import type { Menu } from './menu-control';
  * moves there at once). Fighters lists the roster to send back in; Clear the stage asks first.
  */
 
-export type MenuState = { phase: MatchPhase; fighting: number; joinShown: boolean; volume: number; muted: boolean; level: LevelId };
+export type MenuState = { phase: MatchPhase; fighting: number; joinShown: boolean; kidPower: boolean; volume: number; muted: boolean; level: LevelId };
 export type MenuItem = { id: string; label: string; selected?: boolean; disabled?: boolean; aria?: string };
-export type MenuRow = { id: 'fight' | 'level' | 'fighters' | 'join' | 'volume' | 'clear' | 'resume'; title?: string; items: MenuItem[]; level?: number; off?: boolean };
+export type MenuRow = { id: 'fight' | 'level' | 'fighters' | 'join' | 'kid' | 'volume' | 'clear' | 'resume'; title?: string; items: MenuItem[]; level?: number; off?: boolean };
 
 export const CROWN_LABEL = '👑 Crown the champion!';
 export const CLEAR_ASK = 'Clear the stage? Everyone goes back to the Fighters.';
@@ -24,6 +24,11 @@ export const FIGHTING_NOW = 'Fighting now';
 /** The level row's title. */
 export const LEVEL_TITLE = 'Level';
 export const NO_FIGHTERS = 'No fighters yet. Make one on a phone!';
+/**
+ * The Kid power switch's two labels: on, a creature a child steers with a controller hits harder and is hard for the
+ * computer to knock about (`KID_POWER`); off, everyone fights on the same numbers.
+ */
+export const KID_POWER_ON = 'Kid power: on', KID_POWER_OFF = 'Kid power: off';
 
 /** The menu's rows for a state (pure: the page is drawn from it). */
 export function menuModel(s: MenuState): MenuRow[] {
@@ -36,6 +41,7 @@ export function menuModel(s: MenuState): MenuRow[] {
     { id: 'level', title: LEVEL_TITLE, items: LEVEL_ORDER.map((id) => ({ id, label: LEVELS[id as keyof typeof LEVELS].name, selected: id === s.level })) },
     { id: 'fighters', items: [{ id: 'fighters', label: 'Fighters' }] },
     { id: 'join', items: [{ id: 'join', label: 'Show join code', selected: s.joinShown }] },
+    { id: 'kid', items: [{ id: 'kid', label: s.kidPower ? KID_POWER_ON : KID_POWER_OFF, selected: s.kidPower }] },
     { id: 'volume', title: 'Sound', level, off: s.muted, items: [
       { id: 'down', label: '−', aria: 'Quieter', disabled: level <= 0 },
       { id: 'up', label: '+', aria: 'Louder', disabled: level >= 10 },
@@ -58,6 +64,8 @@ export type MenuHandlers = {
   sendBack(id: string): void;
   /** Show or hide the join card. */
   join(): void;
+  /** Turn Kid power on or off. */
+  kidPower(): void;
   volume(delta: number): void;
   mute(): void;
   clear(): void;
@@ -88,6 +96,7 @@ export function openMenu(root: HTMLElement, state: MenuState, on: MenuHandlers, 
     else if (row === 'level') { on.level(id as LevelId); close(); }
     else if (id === 'fighters') showPage('fighters');
     else if (id === 'join') on.join();
+    else if (id === 'kid') on.kidPower();
     else if (row === 'volume') {
       if (id === 'mute') on.mute();
       else if (!current.find((r) => r.id === 'volume')?.items.find((i) => i.id === id)?.disabled) on.volume(id === 'up' ? 0.1 : -0.1);
@@ -99,7 +108,7 @@ export function openMenu(root: HTMLElement, state: MenuState, on: MenuHandlers, 
     const buttons: HTMLElement[] = row.items.map((it) => h('button', {
       class: `rm-btn${it.selected ? ' on' : ''}${it.disabled ? ' dim' : ''}${row.id === 'fight' ? ' rm-big' : ''}`, type: 'button',
       'data-focus': true, 'data-key': `${row.id}:${it.id}`, 'aria-label': it.aria, 'aria-disabled': it.disabled ? 'true' : undefined,
-      'aria-pressed': it.id === 'join' || it.id === 'mute' || row.id === 'level' ? String(!!it.selected) : undefined,
+      'aria-pressed': it.id === 'join' || it.id === 'kid' || it.id === 'mute' || row.id === 'level' ? String(!!it.selected) : undefined,
       onclick: () => act(row.id, it.id),
     }, it.label));
     if (row.level !== undefined) {

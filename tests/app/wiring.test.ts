@@ -7,7 +7,7 @@ import type { Made } from '../../src/bring/workshop';
 import type { Maker, PhoneCommand, MatchPhase } from '../../src/bring/protocol';
 import type { RosterItem } from '../../src/roster/roster';
 import {
-  capsuleUi, gatedVoice, handleCommand, keepMade, localStore, memoryRoster, OOPS_MS, MatchBroadcast, sendBack, type CommandDeps, JOIN_CARD_DEFAULT, JOIN_CARD_KEY, joinKey, startHint,
+  capsuleUi, gatedVoice, handleCommand, keepMade, localStore, memoryRoster, OOPS_MS, MatchBroadcast, sendBack, type CommandDeps, JOIN_CARD_DEFAULT, JOIN_CARD_KEY, joinKey, KID_POWER_KEY, kidPowerSwitch, startHint,
 } from '../../src/app/wiring';
 import { loadFixture } from '../fixtures/fighters';
 
@@ -318,5 +318,32 @@ describe('the join card on the TV (ruling R39: smaller, easy to hide, remembered
     expect(kept).toEqual(['on', 'off']);
     expect(createBring(card, client, { mode: JOIN_CARD_DEFAULT }).cardShown).toBe(true);
     expect(JOIN_CARD_KEY).toBe('rumble.joinCard');
+  });
+});
+
+describe('the Kid power switch (owner, 2026-11-20): on unless a grown-up turns it off, remembered across nights', () => {
+  /** A remembered-settings store in memory, as localStorage keeps them (JSON). */
+  const store = (start: Record<string, string> = {}) => {
+    const kept = new Map(Object.entries(start));
+    return {
+      kept,
+      stored: <T>(key: string, fallback: T): T => (kept.has(key) ? (JSON.parse(kept.get(key)!) as T) : fallback),
+      remember: (key: string, v: unknown) => void kept.set(key, JSON.stringify(v)),
+    };
+  };
+
+  test('a fresh TV has it on; a toggle turns it off and is remembered; the next night starts as left', () => {
+    expect(KID_POWER_KEY).toBe('rumble.kidPower');
+    const s = store();
+    const first = kidPowerSwitch(s);
+    expect(first.on).toBe(true);
+    expect(first.toggle()).toBe(false);
+    expect(first.on).toBe(false);
+    expect(s.kept.get(KID_POWER_KEY)).toBe('false');
+    expect(kidPowerSwitch(s).on).toBe(false);
+    first.toggle();
+    expect(kidPowerSwitch(s).on).toBe(true);
+    // a broken value is the default (on)
+    expect(kidPowerSwitch(store({ [KID_POWER_KEY]: '"maybe"' })).on).toBe(true);
   });
 });

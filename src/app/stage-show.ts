@@ -22,6 +22,7 @@ import { platformsAt, topBelow, type Level, type Platform } from '../stage/level
 import type { MischiefCue } from '../stage/mischief';
 import type { StageSim } from '../stage/sim';
 import { DT, type V2 } from '../stage/types';
+import { padColour } from './pad-seats';
 import type { StageLoop } from './stage-loop';
 
 /**
@@ -78,6 +79,8 @@ const TRAIL_Z = -0.6;
 const POP_UP = 0.4;
 /** The camera's field of view on the stage (degrees): a flatter side view. */
 export const STAGE_FOV = 30;
+/** The kid-power glow's colour on a creature with no pad arrow (the dev page's player one): player one's pink. */
+const KID_GLOW_COLOUR = padColour(0);
 /** Confetti lies on a platform this far in front of and behind the play plane (m), or falls away. */
 const CONFETTI_DEPTH = 1.5;
 
@@ -94,6 +97,8 @@ export class StageShow {
   readonly bubbles: EdgeBubbles;
   /** The arrows over the creatures controllers steer. */
   readonly arrows: PadArrows;
+  /** Each steered creature's pad colour (its arrow's), for its kid-power glow. */
+  private readonly padColours = new Map<string, string>();
   readonly drops: DropInLooks;
   readonly finale: Finale;
   /** Who wears the crown (null: nobody). */
@@ -233,10 +238,12 @@ export class StageShow {
   /**
    * A controller steers creature `id`: a small arrow in its `colour` (with `label`, the player's number) floats over it
    * while it is on the screen, dimmed and sleepy while the pad `resting` (the AI drives meanwhile). A null colour takes
-   * the arrow away.
+   * the arrow away. While it has kid power (`StageFighter.kid`) it glows in that colour too.
    */
   mark(id: string, colour: string | null, label = '', resting = false): void {
     this.arrows.set(id, colour, label, resting);
+    if (colour) this.padColours.set(id, colour);
+    else this.padColours.delete(id);
   }
 
   /** The edge bubble of `id` as drawn this frame (where it is on the stage), for overlays such as the dev page's marker. */
@@ -285,8 +292,9 @@ export class StageShow {
   /**
    * Draws one frame of `sim` (stepped by `loop`) after `realDt` real seconds: everyone in play part way between the
    * last two steps, posed (a lone one showing off, a vine rider hanging), with the caller's changes (`o.adjust`); their
-   * damage looks, trails, power-ups, presents, parachutes and beams; the scenery at that moment; the camera following
-   * everyone drawn (and a present on its way down); the edge bubbles, knockout effects and the crown.
+   * damage looks, trails, power-ups and kid-power glows, presents, parachutes and beams; the scenery at that moment;
+   * the camera following everyone drawn (and a present on its way down); the edge bubbles, knockout effects and the
+   * crown.
    */
   draw(sim: StageSim, loop: StageLoop, realDt: number, o: DrawOptions): void {
     const alpha = loop.alpha, steps = (realDt * loop.timeScale) / DT, level = this.level;
@@ -345,6 +353,7 @@ export class StageShow {
       look.w = f.mover.w;
       look.h = f.mover.h;
       look.facing = f.facing;
+      look.kid = f.kid ? (this.padColours.get(f.id) ?? KID_GLOW_COLOUR) : null;
       looks.push(look);
     }
     // anyone drawn last frame and no longer in play (out, or taken off) is hidden until the caller removes it

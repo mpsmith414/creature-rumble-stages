@@ -102,6 +102,34 @@ describe('StageLoop: the fight steps at a fixed 60 Hz whatever the screen does',
     expect(turned).toBe(true);
   });
 
+  test('kid power (off by default): set before every step on a steered fighter while its source answers, never on a brain', () => {
+    const { sim, loop } = twoOnStage();
+    const a = sim.get('a')!, b = sim.get('b')!;
+    let resting = false;
+    let kidThen: boolean | null = null;
+    loop.steer('a', () => {
+      kidThen = a.kid; // set after the source answers, for the step it steers
+      return resting ? null : { ...NO_INTENT };
+    });
+    loop.frame(1 / 60);
+    expect(loop.kidPower).toBe(false);
+    expect(a.kid).toBe(false);
+    loop.kidPower = true;
+    loop.frame(1 / 60);
+    expect(a.kid).toBe(true);
+    expect(b.kid).toBe(false);
+    expect(kidThen).toBe(false);
+    resting = true; // a pad put down: the brain drives, no kid power
+    loop.frame(1 / 60);
+    expect(a.kid).toBe(false);
+    resting = false;
+    loop.frame(1 / 60);
+    expect(a.kid).toBe(true);
+    loop.steer('a', null); // given back to the AI
+    loop.frame(1 / 60);
+    expect(a.kid).toBe(false);
+  });
+
   test('without brains the others stand still; a steered fighter still moves', () => {
     const { sim, loop } = twoOnStage(false);
     const jump: Intent = { ...NO_INTENT, jump: true };

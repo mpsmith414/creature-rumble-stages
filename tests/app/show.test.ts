@@ -660,6 +660,28 @@ describe('RumbleShow: a controller steers a creature (Task 17)', () => {
     expect(asked).toBe(m);
   });
 
+  test('kid power: on by default, the steered creature has it and the AI’s do not; the switch holds through Again!', () => {
+    const r = rig();
+    for (const k of ['fists', 'blob']) r.show.register(card(k));
+    r.show.quickFill(['fists', 'blob']);
+    expect(r.show.kidPower).toBe(true);
+    r.show.steer('fists', () => NO_INTENT);
+    r.run(0.2);
+    expect(r.fighter('fists')!.kid).toBe(true);
+    expect(r.fighter('blob')!.kid).toBe(false);
+    r.show.kidPower = false;
+    r.run(0.2);
+    expect(r.fighter('fists')!.kid).toBe(false);
+    // a new fight (Again!) keeps the switch as it is
+    expect(r.show.crown()).toBe(true);
+    expect(r.show.again()).toBe(true);
+    r.run(GROUP_DROP_IN_S + 0.5);
+    expect(r.fighter('fists')!.kid).toBe(false);
+    r.show.kidPower = true;
+    r.run(0.2);
+    expect(r.fighter('fists')!.kid).toBe(true);
+  });
+
   test('a level pick keeps the pad on its creature', () => {
     const r = rig();
     for (const k of ['fists', 'blob']) r.show.register(card(k));
